@@ -1,4 +1,4 @@
-import Moo from "moo"
+const Moo = require("moo")
 
 const Registers = { 
   r0: 0, r1: 1, r2: 2, r3: 3, r4: 4, r5: 5, r6: 6, r7: 7, sp: 6, pc: 7, 
@@ -137,14 +137,19 @@ class Lexer {
 
   constructor() {
 
-    const symbol = `[a-z.$][a-z0-9.$]*` 
+    const symbol = `[a-z.\$][a-z0-9.\$]*` 
 
     this.lexer = Moo.compile({
-      WS:      /[ \t]+/,
-      comment: /;.*?$/,
-      label:   new RegExp(symbol + `:`),
-      number:  /0|[1-9][0-9]*/,
-      string:  /"(?:\\["\\]|[^\n"\\])*"/,
+      WS:             /[ \t]+/,
+      comment:        /;.*?$/,
+      label:          new RegExp(symbol + `:`),
+      ones_complement:   /\^c/,
+      octal_number:   /[0-7]+|\^o[0-7]+/,
+      binary_number:  /\^b[01]+/,
+      decimal_number: /\^d[0-9]+/,
+      float_number:   /\^f[0-9]\.[0-9]/,
+      bad_number:     /[0-7][89][0-9]*/,
+      string:         /"(?:\\["\\]|[^\n"\\])*"/,
       lparen:  '(',
       rparen:  ')',
       '+':     '+',
@@ -204,6 +209,11 @@ class Lexer {
     return sym
   }
 
+  pushBack(sym) {
+    this.offset--
+    if (this.tokens[this.offset] != sym)
+      throw new Error('pushback error')
+  }
 }
 
 
@@ -283,12 +293,93 @@ class Parser {
     }
   }
 
+  lookingAt(symType) {
+    const sym = this.lexer.peekNotWS()
+    return (sym.type == symType)
+  }
+
+  accept(symType) {
+    if (this.lookingAt(symType))
+      return this.lexer.next()
+    else
+      return null
+  }
+
   expect(symType, context) {
     const sym = this.lexer.nextNotWS()
     if (sym.type == symType)
       return sym
 
     otherError(`expected ${symType} but got ${sym.type} ${context}`)
+  }
+
+  pushBack(sym) {
+    this.lexer.pushBack(sym)
+  }
+
+  parseExpression(next) {
+    return this.parseTerm(next)
+    // while op
+    //   term
+  }
+
+  parseIntLiteral(number, base) {
+    if (number.startsWith('^'))
+      number = number.slice(2)
+    return Number.parseInt(number, base)
+  }
+
+  parseTerm(next) {
+    let sign = 1
+    let value
+    let complement = false
+
+    while (next.type == "-" || next.type == "+") {
+      console.log("prefix", next.type)
+      if (next.type == "-")
+        sign = -sign
+      next = this.lexer.next()
+    }
+
+    console.log("term", next)
+    if (next.type == 'ones_complement') {
+      complement = true
+      next = this.lexer.nextNotWS()
+    }
+
+    switch (next.type) {
+      case 'octal_number':
+        value = this.parseIntLiteral(next.text, 8)
+        break
+
+      case 'decimal_number':
+        value = this.parseIntLiteral(next.text, 10)
+        break
+
+      case 'binary_number':
+        value = this.parseIntLiteral(next.text, 2)
+        break
+
+      case 'bad_number':
+        otherError(`If you want "${next.text}" to be a decimal number, precede it with "^d"`)
+        break
+
+      default:
+        error(next, `invalid start of an expression`)
+        break;
+
+    }
+    
+    value *= sign
+    if (complement)
+      value = ~value
+    return value
+
+// V    number
+//     symbol
+//     'a
+//     "aa
+//     "<" expression ">"
   }
 
   parseDDDDDD(operator) {
@@ -320,14 +411,34 @@ class Parser {
           }
           else 
             error(`unknown address style: "(${register.text})${aa.text}"`)
+          break
         }
-        else {
-          otherError("mode")
+        error(`unknown address style: "(${register.text})${aa.text}"`)
+
+      case '-':
+        if (this.lookingAt('(')) {  // -(rn)
+          break
+        }
+        
+        // fall through...
+        //
+      default:
+        console.log('default', next)
+        const value = this.parseExpression(next)
+
+        if (this.accept('(')) {   // exp(Rn)
+          next = this.expect('register', 'inside parentheses of relative address')
+          this.expect(')', 'after register name')
+          extraWord = value
+          register = Registers[next.text]
+          mode = 6
+        }
+        else {                      // exp -- relative mode
+          extraWord = value - this.context.clc - 4
+          register = 7
+          mode = 6
         }
 
-      default:
-        error(operator, `Can't parse the operand`)
-  
     }
 
     return {
@@ -361,15 +472,10 @@ class Parser {
   }
 
   parseRts(operator) {
-    const reg = this.lexer.nextNotWS()
-    if (reg.type == `register`) {
-      return {
-        opEncoding: Registers[reg.text],
-        extraWords: [],
-      }
-    }
-    else {
-      error(reg, `RTS takes a register operand`)
+    const reg = this.expect('register', 'RTS takes a register operand')
+    return {
+      opEncoding: Registers[reg.text],
+      extraWords: [],
     }
   }
 
@@ -445,6 +551,7 @@ class Parser {
 
 
 }
+
 
 const parser = new Parser()
 parser.parseLine(process.argv[2])
