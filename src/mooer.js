@@ -109,29 +109,59 @@ const Operators = {
 
   // 15						9	8	7							0
   // Opcode	S	Operation Code
-  emt:  { op: 0o104000, fmt: `Trap1`, desc: `Emulator trap: -(SP) ← PS; -(SP) ← PC; PC ← (30); PS ← (32)` },
-  trap: { op: 0o104400, fmt: `Trap1`, desc: `General trap: -(SP) ← PS; -(SP) ← PC; PC ← (34); PS ← (36)` },
+  emt:  { op: 0o104000, fmt: `Trap`,  desc: `Emulator trap: -(SP) ← PS; -(SP) ← PC; PC ← (30); PS ← (32)` },
+  trap: { op: 0o104400, fmt: `Trap`,  desc: `General trap: -(SP) ← PS; -(SP) ← PC; PC ← (34); PS ← (36)` },
 
   // 15															0
   // Opcode
 
-  rti:  { op: 0o000002, fmt: `Trap2`, desc: `Return from interrupt: PC ← (SP)+; PS ← (SP)+` },
-  bpt:  { op: 0o000003, fmt: `Trap2`, desc: `Breakpoint trap: -(SP) ← PS; -(SP) ← PC; PC ← (14); PS ← (16)` },
-  iot:  { op: 0o000004, fmt: `Trap2`, desc: `I/O trap: -(SP) ← PS; -(SP) ← PC; PC ← (20); PS ← (22)` },
-  rtt:  { op: 0o000006, fmt: `Trap2`, desc: `Return from trap: PC ← (SP)+; PS ← (SP)+` },
+  halt:  { op: 0o000000, fmt: `Opcode`, desc: `halt` },
+  wait:  { op: 0o000001, fmt: `Opcode`, desc: `wait for interrupt` },
+  rti:   { op: 0o000002, fmt: `Opcode`, desc: `Return from interrupt: PC ← (SP)+; PS ← (SP)+` },
+  bpt:   { op: 0o000003, fmt: `Opcode`, desc: `Breakpoint trap: -(SP) ← PS; -(SP) ← PC; PC ← (14); PS ← (16)` },
+  iot:   { op: 0o000004, fmt: `Opcode`, desc: `I/O trap: -(SP) ← PS; -(SP) ← PC; PC ← (20); PS ← (22)` },
+  reset: { op: 0o000005, fmt: `Opcode`, desc: `reset external bus` },
+
+  
+  // 15                 6 5 4 3 2 1 0
+  // Opcode               1 S N Z V C
+
+  clc: { op: 0o000241, fmt: `Opcode`, desc: `clear C` },
+  clv: { op: 0o000242, fmt: `Opcode`, desc: `clear V` },
+  clz: { op: 0o000244, fmt: `Opcode`, desc: `clear Z` },
+  cln: { op: 0o000250, fmt: `Opcode`, desc: `clear N` },
+  sec: { op: 0o000261, fmt: `Opcode`, desc: `setC` },
+  sev: { op: 0o000262, fmt: `Opcode`, desc: `set V` },
+  sez: { op: 0o000264, fmt: `Opcode`, desc: `set Z` },
+  sen: { op: 0o000270, fmt: `Opcode`, desc: `set N` },
+  scc: { op: 0o000277, fmt: `Opcode`, desc: `set all CC's` },
+  ccc: { op: 0o000257, fmt: `Opcode`, desc: `clear all CC's` },
+  nop: { op: 0o000240, fmt: `Opcode`, desc: `no Operation` },
+
 }
 
 const Opcodes = Object.keys(Operators)
 
 function otherError(msg) {
   console.error(msg)
+  throw msg
 }
 
 function error(sym, msg) {
-  otherError(msg)
+  console.error(msg)
   console.info(`${sym.line}:${sym.col}  Looking at «${sym.text}» (type ${sym.type})`)
+  throw msg
 }
 
+function listForExtras(...extras) {
+  return extras.reduce((result, next) => {
+    if (next !== undefined)
+      result.push(next)
+    return result
+  },
+    []
+  )
+}
 
 class Lexer {
 
@@ -140,20 +170,27 @@ class Lexer {
     const symbol = `[a-z.\$][a-z0-9.\$]*` 
 
     this.lexer = Moo.compile({
-      WS:             /[ \t]+/,
-      comment:        /;.*?$/,
-      label:          new RegExp(symbol + `:`),
-      ones_complement:   /\^c/,
-      octal_number:   /[0-7]+|\^o[0-7]+/,
-      binary_number:  /\^b[01]+/,
-      decimal_number: /\^d[0-9]+/,
-      float_number:   /\^f[0-9]\.[0-9]/,
-      bad_number:     /[0-7][89][0-9]*/,
-      string:         /"(?:\\["\\]|[^\n"\\])*"/,
+      WS:              /[ \t]+/,
+      comment:         /;.*?$/,
+      label:           new RegExp(symbol + `:`),
+      ones_complement: "^c",
+      octal_number:    /[0-7]+|\^o[0-7]+/,
+      binary_number:   /\^b[01]+/,
+      decimal_number:  /\^d[0-9]+/,
+      float_number:    /\^f[0-9]\.[0-9]/,
+      bad_number:      /[0-7][89][0-9]*/,
+      comma:           ",",
+      single_char:     /'./,
+      double_char:     /"../,
+      immediate:       "#",
+      deferred:        "@",
+      open_expr_grp:   "<",
+      close_expr_grp:  ">",
+      autoinc:         ")+",
+      autodec:         "-(",
       lparen:  '(',
       rparen:  ')',
-      '+':     '+',
-      '-':     '-',
+      binop:           /[-+*/&!]/,
       '@':     '@',
 
       symbol:  {
@@ -220,33 +257,129 @@ class Lexer {
 const MemInstruction = 1
 const MemOperand     = 2
 
+function octal(n) {
+  return (n & 0xffff).toString(8).padStart(6, '0')
+}
+
+class Memory {
+  constructor() {
+    this.memory = []
+  }
+  getByte(addr) {
+    return this.memory[addr]
+  }
+  setByte(addr, value) {
+    this.memory[addr] = value
+  }
+
+  getWord(addr) {
+    return (this.memory[addr+1] << 8 + this.memory[addr])
+  }
+
+  setWord(addr, value) {
+    this.memory[addr] = value & 0xff
+    this.memory[addr+1] = value >> 8
+  }
+
+  toString() {
+    const result = []
+    for (let i = 0; i < this.memory.length; i += 2) {
+      if (this.memory[i] !== undefined || this.memory[i+1] !== undefined) {
+        result.push(`${octal(i)}: ${octal(this.memory[i+1] << 8 | this.memory[i])}`)
+      }
+    }
+    return result.join("\n")
+  }
+}
+
+const SymbolType = {
+  undefined: 0,
+  label: 1,
+  assigned: 2,
+}
+
+class Symbol {
+
+  constructor(name, value, type) {
+    this.name = name
+    this.value = value
+    this.type = type
+  }
+
+  isDefined() {
+    return this.type !== SymbolType.undefined
+  }
+}
+
+class SymbolTable {
+  constructor() {
+    this.symbols = {}
+  }
+
+  lookup(name) {
+    return this.symbols[name]
+  }
+
+  getValueOf(name) {
+    const sym = this.lookup(name)
+    if (sym)
+      return sym.value
+    else
+      return undefined
+  }
+
+  setValueOf(name, value) {
+    const sym = this.lookup(name)
+    if (sym)
+      sym.value = value
+    else
+      otherError(`attempt to update nonexistent symbol "${name}"`)
+  }
+
+  addLabel(name, value) {
+    if (name in this.symbols) {
+      otherError(`Duplicate label "${name}" not allowed`)
+    }
+    else {
+      this.symbols[name] = new Symbol(name, value, SymbolType.label)
+    }
+  }
+}
+
+
 class ParseContext {
 
   constructor() {
     this.generated = {}
-    this.codeMemory = []
-    this.symbols = {
-      ".": 0o1000
-    }
+    this.memory = new Memory
+    this.symbols = new SymbolTable()
+    this.symbols.addLabel(`.`, 0o1000)
   }
 
-  get clc() { return this.symbols["."] }
-  set clc(val) { this.symbols["."] = val }
+  get clc() { return this.symbols.getValueOf(".") }
+  set clc(val) { this.symbols.setValueOf(".", val) }
 
 
   addLabel(symbol) {
+    if (symbol.endsWith(":"))
+      symbol = symbol.slice(0, -1)
+
     if (symbol in this.symbols) {
       otherError(`Duplicate label "${symbol}" not allowed`)
     }
     else {
-      this.symbols[symbol] = this.clc
+      this.symbols.addLabel(symbol, this.clc)
     }
+  }
+
+
+  lookupSymbol(name) {
+    return this.symbols.lookup(name)
   }
 
   addInstruction(instruction, additionalWords) {
     this.storeWordInMemory(instruction, MemInstruction)
     if (additionalWords) {
-      console.log("AW", additionalWords)
       additionalWords.forEach(word => {
         this.storeWordInMemory(word, MemOperand)
       })
@@ -255,8 +388,8 @@ class ParseContext {
 
   storeWordInMemory(value, type) {
     if ((this.clc & 1) === 0) {
-      this.codeMemory[this.clc++] = value & 0xff
-      this.codeMemory[this.clc++] = (value >> 8) & 0xff
+      this.memory.setWord(this.clc, value)
+      this.clc += 2
     }
     else
       otherError(`Attempt to store a word at an odd address (0x$(this.clc.toString(8)})`)
@@ -270,28 +403,9 @@ class Parser {
     this.lexer = new Lexer()
   }
 
-  parseLine(line) {
-    this.lexer.analyze(line)
-    let sym = this.lexer.nextNotWS()
-
-    if (!sym)
-      return
-
-    switch (sym.type) {
-      case 'comment':
-      case 'NL':
-        break
-
-      case 'label':
-      case 'opcode':
-        this.parseLabelledLine(sym)
-        break
-
-      default:
-        error(sym, `A line should start with a label, an opcode, a directive, or a symbol.`)
-        break
-    }
-  }
+  //
+  // Lexer interface
+  //
 
   lookingAt(symType) {
     const sym = this.lexer.peekNotWS()
@@ -313,14 +427,82 @@ class Parser {
     otherError(`expected ${symType} but got ${sym.type} ${context}`)
   }
 
+  next() {
+    return this.lexer.nextNotWS()
+  }
+
   pushBack(sym) {
     this.lexer.pushBack(sym)
   }
 
+  peek() {
+    return this.lexer.peekNotWS()
+  }
+
+  // Interface to symbol table
+
+  lookupSymbol(name) {
+    return this.context.lookupSymbol(name)
+  }
+
+  //
+  // Parsing
+
+  parseLine(line) {
+    this.lexer.analyze(line)
+    let sym = this.next()
+
+    if (!sym)
+      return
+
+    switch (sym.type) {
+      case 'comment':
+      case 'NL':
+        break
+
+      case 'label':
+      case 'opcode':
+        this.parseLabelledLine(sym)
+        break
+
+      default:
+        error(sym, `A line should start with a label, an opcode, a directive, or a symbol.`)
+        break
+    }
+  }
+
   parseExpression(next) {
-    return this.parseTerm(next)
-    // while op
-    //   term
+    let value = this.parseTerm(next)
+    let op
+
+    while (op = this.accept('binop')) {
+      const t = this.parseTerm(this.next())
+      switch (op.text) {
+        case '+':
+          value += t
+          break
+        case '-':
+          value -= t
+          break
+        case '*':
+          value *= t
+          break
+        case '/':
+          if (t === 0)
+            otherError(`attempt to divide ${value} by zero`)
+          value /= t 
+          break
+        case '&':
+          value &= t 
+          break
+        case '!':
+          value |= t 
+          break
+        default:
+          error(op, `invalid binarey operartor`)
+      }
+    }
+    return value & 0xffff
   }
 
   parseIntLiteral(number, base) {
@@ -334,17 +516,15 @@ class Parser {
     let value
     let complement = false
 
-    while (next.type == "-" || next.type == "+") {
-      console.log("prefix", next.type)
-      if (next.type == "-")
+    while (next.type == "binop" && (next.text == "+" || next.text == "-")) {
+      if (next.text == "-")
         sign = -sign
-      next = this.lexer.next()
+      next = this.next()
     }
 
-    console.log("term", next)
     if (next.type == 'ones_complement') {
       complement = true
-      next = this.lexer.nextNotWS()
+      next = this.next()
     }
 
     switch (next.type) {
@@ -364,30 +544,61 @@ class Parser {
         otherError(`If you want "${next.text}" to be a decimal number, precede it with "^d"`)
         break
 
+      case 'open_expr_grp':
+        value = this.parseExpression(this.next())
+        this.expect(`close_expr_grp`, `missing ">" at end of bracketed expression`)
+        break
+
+      case 'symbol':
+        const sym = this.lookupSymbol(next.text)
+        if (sym && sym.isDefined())
+          value = sym.value
+        else
+          value = NaN
+        break
+
+      case 'single_char':
+        value = next.text.charCodeAt(1)
+        if (value > 127)
+          error(next, `Sorry, only 8 bit characters are allowed`)
+        break
+
+      case 'double_char':
+        const c1 = next.text.charCodeAt(1)
+        const c2 = next.text.charCodeAt(1)
+        if (c1 > 127 || c2 > 127)
+          error(next, `Sorry, only 8 bit characters are allowed`)
+        value = c2 << 8 | c1
+        break
+
       default:
         error(next, `invalid start of an expression`)
         break;
 
     }
-    
+
     value *= sign
     if (complement)
       value = ~value
     return value
 
-// V    number
-//     symbol
-//     'a
-//     "aa
-//     "<" expression ">"
+    //     'a
+    //     "aa
+    //     "<" expression ">"
   }
 
-  parseDDDDDD(operator) {
-    let next = this.lexer.nextNotWS()
+  parseDD(operator) {
+    let next = this.next()
     let mode
     let register
     let extraWord
+    let deferred = 0
+    let value
 
+    if (next.type === `deferred`) {
+      deferred = 1
+      next = this.next()
+    }
 
     switch (next.type) {
 
@@ -397,38 +608,37 @@ class Parser {
         break
 
       case 'lparen':
-        next = this.lexer.nextNotWS()
-        if (next.type == 'register') {
-          this.expect(`rparen`, `after register`)
-          const aa = this.lexer.peekNotWS()
-          if (aa.type == '+') {       // (rn)+
-            mode = 2
-            register = Registers[next.text]
-          }
-          else if (aa.type == 'EOF') {  // (rn)
-            mode = 1
-            register = Registers[next.text]
-          }
-          else 
-            error(`unknown address style: "(${register.text})${aa.text}"`)
-          break
-        }
-        error(`unknown address style: "(${register.text})${aa.text}"`)
+        next = this.expect('register', 'after an "("')
+        register = Registers[next.text]
 
-      case '-':
-        if (this.lookingAt('(')) {  // -(rn)
-          break
+        if (this.lookingAt('autoinc')) {
+          mode = 2
         }
-        
-        // fall through...
-        //
+        else {
+          this.expect('rparen', 'after the register name') 
+          mode = 1
+        }
+        break;
+
+      case 'autodec':
+        next = this.expect('register', 'in autodecrement')
+        this.expect('rparen', '')
+        register = Registers[next.text]
+        mode = 4
+        break
+
+      case 'immediate':
+        value = this.parseExpression(this.next())
+        extraWord = value
+        register = 7
+        mode = 2
+        break
+
       default:
-        console.log('default', next)
-        const value = this.parseExpression(next)
-
-        if (this.accept('(')) {   // exp(Rn)
+        value = this.parseExpression(next)
+        if (this.accept('lparen')) {   // exp(Rn)
           next = this.expect('register', 'inside parentheses of relative address')
-          this.expect(')', 'after register name')
+          this.expect('rparen', 'after register name')
           extraWord = value
           register = Registers[next.text]
           mode = 6
@@ -442,33 +652,80 @@ class Parser {
     }
 
     return {
-      dddddd: mode << 3 | register,
+      dd: (mode | deferred) << 3 | register,
       extraWord,
     }
   }
 
   parseOneOp(operator) {
-    const { dddddd, extraWord } =  this.parseDDDDDD(operator)
+    const { dd, extraWord } =  this.parseDD(operator)
     return {
-      opEncoding: dddddd,
-      extraWords: extraWord === undefined ? [] : [ extraWord ]
+      opEncoding: dd,
+      extraWords: listForExtras(extraWord),
     }
-      
+
   }
 
   parseTwoOp1(operator) {
+    const op1 = this.parseDD(operator)
+    this.expect('comma', 'after first operand')
+    const op2 = this.parseDD(operator)
+
+    return {
+      opEncoding: op1.dd << 6 | op2.dd,
+      extraWords: listForExtras(op1.extraWord, op2.extraWord),
+    }
   }
 
   parseTwoOp2(operator) {
+    const reg = this.expect('register', ``)
+    this.expect('comma')
+    const op2 = this.parseDD(operator)
+
+    return {
+      opEncoding: Registers[reg.text] << 6 | op2.dd,
+      extraWords: listForExtras(op2.extraWord),
+    }
   }
 
   parseBranch(operator) {
+    const target = this.next()
+    let offset = this.parseExpression(target)
+    offset -= (this.context.clc + 2)
+    offset /= 2
+    if (offset < -128 || offset > 127)
+      error(target, `is too far away from this instruction (its offset is ${offset} words, ` +
+                    `and we're limited to an offset between -128 and +127 words`)
+    return {
+      opEncoding: offset & 0xff,
+      extraWords: []
+    }
   }
 
   parseSob(operator) {
+    const reg = this.expect('register')
+    this.expect('comma')
+    const target = this.next()
+    let offset = this.parseExpression(target)
+    offset -= (this.context.clc + 2)
+    offset /= 2
+    if (offset < -128 || offset > 127)
+      error(target, `is too far away from this instruction (its offset is ${offset} words, ` +
+                    `and we're limited to an offset between -128 and +127 words`)
+    return {
+      opEncoding: Registers[reg.text] << 8 | offset & 0xff,
+      extraWords: []
+    }
   }
 
   parseJsr(operator) {
+    const reg = this.expect('register')
+    this.expect('comma')
+    const target = this.parseDD(operator)
+    return {
+      opEncoding: Registers[reg.text] << 5 | target.dd,
+      extraWords: listForExtras(target.extraWord),
+    }
   }
 
   parseRts(operator) {
@@ -479,10 +736,26 @@ class Parser {
     }
   }
 
-  parseTrap1(operator) {
+  parseTrap(operator) {
+    let value = 0
+    let next = this.next()
+  
+    if (this.peek() === 'NL') {
+      this.pushBack(next)
+    }
+    else {
+      value = this.parseExpression(next)
+      if (value > 255 || value < -256)
+        error(next, `operand of a trap or emt can only be 8 bits (got ${value})`)
+    }
+    
+    return {
+      opEncoding: value,
+      extraWords: [],
+    }
   }
 
-  parseTrap2(operator) {
+  parseOpcode(_opcode) {
     return {
       opEncoding: 0,
       extraWords: [],
@@ -495,37 +768,45 @@ class Parser {
     let operands
 
     switch (operator.fmt) {
-    case `OneOp`:   
-      operands = this.parseOneOp(operator)
-      break
-    case `TwoOp1`: 
-      operands = this.parseTwoOp1(operator)
-      break
-    case `TwoOp2`: 
-      operands = this.parseTwoOp2(operator)
-      break
-    case `Branch`: 
-      operands = this.parseBranch(operator)
-      break
-    case `Sob`:       
-      operands = this.parseSob(operator)
-      break
-    case `Jsr`:       
-      operands = this.parseJsr(operator)
-      break
-    case `Rts`:       
-      operands = this.parseRts(operator)
-      break
-    case `Trap1`:   
-      operands = this.parseTrap1(operator)
-      break
-    case `Trap2`:   
-      operands = this.parseTrap2(operator)
-      break
+      case `OneOp`:   
+        operands = this.parseOneOp(operator)
+        break
+      case `TwoOp1`: 
+        operands = this.parseTwoOp1(operator)
+        break
+      case `TwoOp2`: 
+        operands = this.parseTwoOp2(operator)
+        break
+      case `Branch`: 
+        operands = this.parseBranch(operator)
+        break
+      case `Sob`:       
+        operands = this.parseSob(operator)
+        break
+      case `Jsr`:       
+        operands = this.parseJsr(operator)
+        break
+      case `Rts`:       
+        operands = this.parseRts(operator)
+        break
+      case `Trap`:   
+        operands = this.parseTrap(operator)
+        break
+      case `Opcode`:   
+        operands = this.parseOpcode(operator)
+        console.log("OPER", operands)
+        break
+      default:
+        throw new Error(`Unknown operand format: ${operator.fmt}`)
     }
+    
+    const next = this.next()
+    if (next && (next.type != 'NL' && next.type != 'EOF'))  {
+      console.dir(next)
+      error(next, `extra operands for "${opcode}"`)
+    }
+
     const instruction = operator.op | operands.opEncoding
-    console.log(`0o` + (instruction).toString(8))
-    console.log(operands)
     this.context.addInstruction(instruction, operands.extraWords)
   }
 
@@ -554,5 +835,9 @@ class Parser {
 
 
 const parser = new Parser()
-parser.parseLine(process.argv[2])
-console.log(parser.context)
+const code = process.argv.slice(2)
+code.forEach(line => parser.parseLine(line))
+console.log("\nSymbols")
+console.log(parser.context.symbols)
+console.log("\nMemory")
+console.log(parser.context.memory.toString())
