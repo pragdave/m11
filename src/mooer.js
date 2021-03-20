@@ -122,7 +122,7 @@ const Operators = {
   iot:   { op: 0o000004, fmt: `Opcode`, desc: `I/O trap: -(SP) ← PS; -(SP) ← PC; PC ← (20); PS ← (22)` },
   reset: { op: 0o000005, fmt: `Opcode`, desc: `reset external bus` },
 
-  
+
   // 15                 6 5 4 3 2 1 0
   // Opcode               1 S N Z V C
 
@@ -139,6 +139,19 @@ const Operators = {
   nop: { op: 0o000240, fmt: `Opcode`, desc: `no Operation` },
 
 }
+
+const Directives = [
+  // ".ascii",
+  // ".asciiz",
+  // ".asciz",
+  ".blkb",
+  ".blkw",
+  ".byte",
+  ".end",
+  ".even",
+  ".odd",
+  ".word",
+]
 
 const Opcodes = Object.keys(Operators)
 
@@ -167,7 +180,7 @@ class Lexer {
 
   constructor() {
 
-    const symbol = `[a-z.\$][a-z0-9.\$]*` 
+    const symbol = `[a-z.$][a-z0-9.$]*` 
 
     this.lexer = Moo.compile({
       WS:              /[ \t]+/,
@@ -179,6 +192,7 @@ class Lexer {
       decimal_number:  /\^d[0-9]+/,
       float_number:    /\^f[0-9]\.[0-9]/,
       bad_number:      /[0-7][89][0-9]*/,
+      equals:          "=",
       comma:           ",",
       single_char:     /'./,
       double_char:     /"../,
@@ -188,19 +202,25 @@ class Lexer {
       close_expr_grp:  ">",
       autoinc:         ")+",
       autodec:         "-(",
-      lparen:  '(',
-      rparen:  ')',
+      lparen:          '(',
+      rparen:          ')',
       binop:           /[-+*/&!]/,
-      '@':     '@',
+
+      directive: {
+        match: /\.ascii?z?\b[^\n]*/,
+        value: s => s.split(/\s+/, 1)[0]
+      },
 
       symbol:  {
         match: new RegExp(symbol), 
         type: Moo.keywords({ 
-          opcode: Opcodes,
-          register: Object.keys(Registers),
+          opcode:    Opcodes,
+          directive: Directives,
+          register:  Object.keys(Registers),
         }),
       },
       NL :     { match: /\n/, lineBreaks: true },
+      "Unknown character":  /./,
     })
     this.tokens = []
   }
@@ -208,7 +228,12 @@ class Lexer {
   analyze(text) {
     this.lexer.reset(text)
     this.tokens = Array.from(this.lexer)
+    console.log(this.tokens)
     this.offset = 0
+  }
+
+  moreToCome() {
+    return this.offset < this.tokens.length
   }
 
   next() {
@@ -256,6 +281,8 @@ class Lexer {
 
 const MemInstruction = 1
 const MemOperand     = 2
+const MemData        = 4
+const MemFillData    = 4
 
 function octal(n) {
   return (n & 0xffff).toString(8).padStart(6, '0')
@@ -336,13 +363,21 @@ class SymbolTable {
       otherError(`attempt to update nonexistent symbol "${name}"`)
   }
 
-  addLabel(name, value) {
-    if (name in this.symbols) {
-      otherError(`Duplicate label "${name}" not allowed`)
+  addValue(name, value, type) {
+    if (name !== "." && name in this.symbols) {
+      otherError(`Duplicate symbol "${name}" not allowed`)
     }
     else {
-      this.symbols[name] = new Symbol(name, value, SymbolType.label)
+      this.symbols[name] = new Symbol(name, value, type)
     }
+  }
+
+  addAssigned(name, value) {
+    this.addValue(name, value, SymbolType.assigned)
+  }
+
+  addLabel(name, value) {
+    this.addValue(name, value, SymbolType.label)
   }
 }
 
@@ -364,14 +399,12 @@ class ParseContext {
     if (symbol.endsWith(":"))
       symbol = symbol.slice(0, -1)
 
-    if (symbol in this.symbols) {
-      otherError(`Duplicate label "${symbol}" not allowed`)
-    }
-    else {
-      this.symbols.addLabel(symbol, this.clc)
-    }
+    this.symbols.addLabel(symbol, this.clc)
   }
 
+  addAssigned(name, value) {
+    this.symbols.addAssigned(name, value)
+  }
 
   lookupSymbol(name) {
     return this.symbols.lookup(name)
@@ -386,6 +419,10 @@ class ParseContext {
     }
   }
 
+  storeByteInMemory(value, type) {
+    this.memory.setByte(this.clc++, value & 0xff)
+  }
+
   storeWordInMemory(value, type) {
     if ((this.clc & 1) === 0) {
       this.memory.setWord(this.clc, value)
@@ -398,9 +435,16 @@ class ParseContext {
 
 
 class Parser {
-  constructor() {
+  constructor(code) {
     this.context = new ParseContext()
     this.lexer = new Lexer()
+    this.code = code
+    this.lexer.analyze(code)
+    console.log("more", this.lexer.moreToCome()) 
+    while (this.lexer.moreToCome()) {
+      console.log("calling parse")
+      this.parseLine()
+    }
   }
 
   //
@@ -448,8 +492,7 @@ class Parser {
   //
   // Parsing
 
-  parseLine(line) {
-    this.lexer.analyze(line)
+  parseLine() {
     let sym = this.next()
 
     if (!sym)
@@ -462,7 +505,16 @@ class Parser {
 
       case 'label':
       case 'opcode':
+      case 'directive':
         this.parseLabelledLine(sym)
+        break
+
+      case 'symbol':
+        const next = this.peek()
+        if (next.type === 'opcode') {
+          error(sym, `are you missing a ":" after "${sym.text}" and before "${next.text}"?`)
+        }
+        this.parseAssignmentLine(sym)
         break
 
       default:
@@ -695,7 +747,7 @@ class Parser {
     offset /= 2
     if (offset < -128 || offset > 127)
       error(target, `is too far away from this instruction (its offset is ${offset} words, ` +
-                    `and we're limited to an offset between -128 and +127 words`)
+        `and we're limited to an offset between -128 and +127 words`)
     return {
       opEncoding: offset & 0xff,
       extraWords: []
@@ -711,7 +763,7 @@ class Parser {
     offset /= 2
     if (offset < -128 || offset > 127)
       error(target, `is too far away from this instruction (its offset is ${offset} words, ` +
-                    `and we're limited to an offset between -128 and +127 words`)
+        `and we're limited to an offset between -128 and +127 words`)
     return {
       opEncoding: Registers[reg.text] << 8 | offset & 0xff,
       extraWords: []
@@ -739,7 +791,7 @@ class Parser {
   parseTrap(operator) {
     let value = 0
     let next = this.next()
-  
+
     if (this.peek() === 'NL') {
       this.pushBack(next)
     }
@@ -748,7 +800,7 @@ class Parser {
       if (value > 255 || value < -256)
         error(next, `operand of a trap or emt can only be 8 bits (got ${value})`)
     }
-    
+
     return {
       opEncoding: value,
       extraWords: [],
@@ -799,7 +851,7 @@ class Parser {
       default:
         throw new Error(`Unknown operand format: ${operator.fmt}`)
     }
-    
+
     const next = this.next()
     if (next && (next.type != 'NL' && next.type != 'EOF'))  {
       console.dir(next)
@@ -811,6 +863,111 @@ class Parser {
   }
 
 
+  parseDirectiveLine(sym) {
+    let value
+    let count
+
+    switch (sym.value) {
+      case  ".ascii":
+      case  ".asciiz":
+      case  ".asciz":
+        const line = sym.text
+        let offset = line.indexOf(" ")
+        if (offset < 0) 
+          error(sym, `a .ascii directive needs an argument`)
+
+        while (offset < line.length && line[offset] == " ")
+          offset ++
+
+        if (offset == line.length)
+          error(sym, `an ascii directive requires an argument`)
+
+        const delimiter = line[offset++]
+        const start = offset
+
+        while (offset < line.length && line[offset] != delimiter)
+          offset ++
+
+        if (offset == line.length || line[offset] != delimiter)
+          error(sym, `couldn't find a matching delimiter («${delimiter}») at end of string`)
+
+        if (offset < line.length && line[offset] == delimiter)
+          offset++
+
+        const end = offset
+        const str = line.slice(start, offset-1)
+
+        while (offset < line.length && line[offset] == " ")
+          offset ++
+
+        if (offset < line.length && line[offset] != ";")
+          error(sym, `extra stuff («${line.slice(end)}») on line after closing delimiter («${delimiter}»)`)
+
+        for (let i = 0; i < str.length; i++)
+          this.context.storeByteInMemory(str.charCodeAt(i), MemData)
+
+        if (sym.value.endsWith("z"))
+          this.context.storeByteInMemory(0, MemData)
+        break
+
+      case  ".blkb":
+      case  ".blkw":
+        if (this.lookingAt('NL')) {
+          count = 1
+        }
+        else {
+          count = this.parseExpression(this.next())
+          if (count <= 0)
+            error(sym, "the count should be positive")
+        }
+        if (sym.text == ".blkw")
+          count *= 2
+
+        this.context.clc += count
+        break
+
+      case  ".byte":
+        value = this.parseExpression(this.next())
+        this.context.storeByteInMemory(value, MemData)
+        while (this.accept('comma')) {
+          let value = this.parseExpression(this.next())
+          this.context.storeByteInMemory(value, MemData)
+        }
+        break
+
+      case  ".end":
+        break
+
+      case  ".even":
+        if (this.context.clc & 1)
+          this.context.storeByteInMemory(0, MemFillData)
+        break
+
+      case  ".odd":
+        if ((this.context.clc & 1) == 0)
+          this.context.storeByteInMemory(0, MemFillData)
+        break
+
+      case  ".word":
+        value = this.parseExpression(this.next())
+        this.context.storeWordInMemory(value, MemData)
+        while (this.accept('comma')) {
+          let value = this.parseExpression(this.next())
+          this.context.storeWordInMemory(value, MemData)
+        }
+        break
+
+      default:
+        error(sym, `unknown directive`)
+    }
+  }
+
+  parseAssignmentLine(sym) {
+    this.expect('equals')
+    const value = this.parseExpression(this.next())
+    this.context.addAssigned(sym.text, value)
+  }
+
   parseLabelledLine(sym) {
     while (sym && sym.type == `label`) {
       this.context.addLabel(sym.text)
@@ -818,9 +975,14 @@ class Parser {
     }
 
     if (sym) {
+      console.log("SYM", sym)
       switch (sym.type) {
         case `opcode`:
           this.parseOpcodeLine(sym)
+          break
+
+        case 'directive':
+          this.parseDirectiveLine(sym)
           break
 
         default:
@@ -834,9 +996,8 @@ class Parser {
 }
 
 
-const parser = new Parser()
-const code = process.argv.slice(2)
-code.forEach(line => parser.parseLine(line))
+const code = process.argv.slice(2).join("\n")
+const parser = new Parser(code)
 console.log("\nSymbols")
 console.log(parser.context.symbols)
 console.log("\nMemory")
