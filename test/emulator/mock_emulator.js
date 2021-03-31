@@ -1,15 +1,15 @@
 
 export class MockEmulator {
 
-  decode_none(_) { return `mock_decode_none` }
-  decode_cc(_) { return `mock_decode_cc` }
-  decode_single(_) { return `mock_decode_single` }
-  decode_double(_) { return `mock_decode_double` }
-  decode_one_and_a_half(_) { return `mock_decode_one_and_a_half` }
-  decode_trap(op) { return op & 0o000377 }
-  decode_rts(op)  { return op & 0o000007}
-  decode_jsr(op)  { return op & 0o000777 }
-  decode_branch(op)  { return op & 0o000377 }
+  // decode_none(_) { return `mock_decode_none` }
+  // decode_cc(_) { return `mock_decode_cc` }
+  // decode_single(_) { return `mock_decode_single` }
+  // decode_double(_) { return `mock_decode_double` }
+  // decode_one_and_a_half(_) { return `mock_decode_one_and_a_half` }
+  // decode_trap(op) { return op & 0o000377 }
+  // decode_rts(op)  { return op & 0o000007}
+  // decode_jsr(op)  { return op & 0o000777 }
+  // decode_branch(op)  { return op & 0o000377 }
 
 
   mov(operand)     { this.result = [ `mov`,   operand, `decode_double` ] }

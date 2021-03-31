@@ -12,9 +12,9 @@ export function assembleAndRun(src) {
     if (typeof addr === `number`)
       return addr
 
-    addr = parser.context.symbols.lookup(addr)
-    if (addr !== undefined)
-      return addr
+    const actualAddr = parser.context.symbols.lookup(addr)
+    if (actualAddr !== undefined)
+      return actualAddr.value
 
     throw new Error(`Cannot find symbol "${addr}"`)
   }

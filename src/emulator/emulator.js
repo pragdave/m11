@@ -155,7 +155,6 @@ export class Emulator {
   mov(inst)     { 
     const value = this.fetchViaDD((inst >> 6), 2)
     this.storeViaDD(inst, value, 2)
-
     this.memory.psw.Z = value === 0
     this.memory.psw.N = value & BIT15
     this.memory.psw.V = false
