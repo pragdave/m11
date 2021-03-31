@@ -32,4 +32,16 @@ export class MachineState {
     this.registers = new Proxy([0, 0, 0, 0, 0, 0, 0, 0], registerInterface)
   }
 
+  get psw() { return this.memory.psw }
+
+  loadAssembledCode(assemblerOutput) {
+    assemblerOutput.toMemory().forEach(([addr, bytes]) => {
+      if (bytes) {
+        for (let byte of bytes)
+          this.memory.setByte(addr++, byte)
+      }
+    })
+    this.registers[7] = assemblerOutput.start_address
+    this.registers[6] = 56 * 1024
+  }
 }

@@ -154,8 +154,7 @@ export function decode(emulator, instruction) {
     if (opcode || desc.mask === 0o177777) {
       const handler = desc.opcodes[opcode]
       if (handler) {
-        const operands = emulator[desc.decode](instruction)
-        emulator[handler](operands)
+        emulator[handler](instruction)
         return
       }
     }

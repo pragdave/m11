@@ -18,6 +18,14 @@ class PSW {
     this._N = this._Z = this._V = this._C = false
   }
 
+  toString() {
+    return  (this._N ? `N` : `•`) +
+            (this._Z ? `Z` : `•`) +
+            (this._V ? `V` : `•`) +
+            (this._C ? `C` : `•`)
+  }
+
+
   get N()   { return this._N }
   set N(TF) { this._N = !!TF }
   
@@ -59,4 +67,11 @@ export class Memory {
     return this.ram.setUint16(addr, value, true)
   }
 
+  getByteOrWord(addr, count) {
+    return count === 1 ? this.getByte(addr) : this.getWord(addr)
+  }
+
+  setByteOrWord(addr, value, count) {
+    return count === 1 ? this.setByte(addr, value) : this.setWord(addr, value)
+  }
 }

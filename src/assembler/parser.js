@@ -1,3 +1,4 @@
+import { octal } from "../helpers"
 import { Lexer } from "./lexer.js"
 import { MemData, MemFillData } from "./memory"
 import { Operators, Registers } from "./predefined.js"
@@ -296,11 +297,10 @@ export class Parser {
     //     "<" expression ">"
   }
 
-  parseDD(_operator) {
+  parseDD(_operator, extraWords) {
     let next = this.next()
     let mode
     let register
-    let extraWord
     let deferred = 0
     let value
 
@@ -338,7 +338,7 @@ export class Parser {
 
       case `immediate`:
         value = this.parseExpression(this.next())
-        extraWord = value
+        extraWords.push(value)
         register = 7
         mode = 2
         break
@@ -348,52 +348,52 @@ export class Parser {
         if (this.accept(`lparen`)) {   // exp(Rn)
           next = this.expect(`register`, `inside parentheses of relative address`)
           this.expect(`rparen`, `after register name`)
-          extraWord = value
+          extraWords.push(value)
           register = Registers[next.text]
           mode = 6
         }
         else {                      // exp -- relative mode
-          extraWord = value - this.context.clc - 4
+          extraWords.push(value - this.context.clc - 4 - 2 * extraWords.length)
           register = 7
           mode = 6
         }
 
     }
 
-    return {
-      dd: (mode | deferred) << 3 | register,
-      extraWord,
-    }
+    return (mode | deferred) << 3 | register
   }
 
   parseOneOp(operator) {
-    const { dd, extraWord } =  this.parseDD(operator)
+    const extraWords = []
+    const dd = this.parseDD(operator, extraWords)
     return {
       opEncoding: dd,
-      extraWords: listForExtras(extraWord),
+      extraWords,
     }
 
   }
 
   parseTwoOp1(operator) {
-    const op1 = this.parseDD(operator)
+    const extraWords = []
+    const op1 = this.parseDD(operator, extraWords)
     this.expect(`comma`, `after first operand`)
-    const op2 = this.parseDD(operator)
+    const op2 = this.parseDD(operator, extraWords)
 
     return {
-      opEncoding: op1.dd << 6 | op2.dd,
-      extraWords: listForExtras(op1.extraWord, op2.extraWord),
+      opEncoding: op1 << 6 | op2,
+      extraWords,
     }
   }
 
   parseTwoOp2(operator) {
+    const extraWords = []
     const reg = this.expect(`register`, ``)
     this.expect(`comma`)
-    const op2 = this.parseDD(operator)
+    const op2 = this.parseDD(operator, extraWords)
 
     return {
-      opEncoding: Registers[reg.text] << 6 | op2.dd,
-      extraWords: listForExtras(op2.extraWord),
+      opEncoding: Registers[reg.text] << 6 | op2,
+      extraWords,
     }
   }
 
@@ -508,12 +508,6 @@ export class Parser {
         throw new Error(`Unknown operand format: ${operator.fmt}`)
     }
 
-    // const next = this.next()
-    // if (next && (next.type !== `NL` && next.type !== `EOF`))  {
-    //   console.dir(next)
-    //   error(next, `extra operands for "${opcode}"`)
-    // }
-
     const instruction = operator.op | operands.opEncoding
     const words = this.context.addInstruction(instruction, operands.extraWords)
     const bytes = []
@@ -521,8 +515,6 @@ export class Parser {
       bytes.push(w & 0xff)
       bytes.push((w >> 8) & 0xff)
     })
-    console.dir(words)
-    console.dir(bytes)
     return bytes
   }
 
@@ -601,6 +593,7 @@ export class Parser {
       case  `.byte`:
         value = this.parseExpression(this.next())
         this.context.storeByteInMemory(value, MemData)
+        generatedBytes.push(value)
         while (this.accept(`comma`)) {
           let value = this.parseExpression(this.next())
           this.context.storeByteInMemory(value, MemData)
@@ -613,7 +606,6 @@ export class Parser {
         if (!this.lookingAt(`NL`) && !this.lookingAt(`comment`) && !this.lookingAt(`EOF`)) {
           ep = this.parseExpression(this.next())
         }
-        console.log(`entry point is ${ep.text}`)
         this.holder.start_address = ep
         break
 
@@ -679,31 +671,34 @@ export class Parser {
 
     const address = this.context.clc
 
-    if (sym) {
-      switch (sym.type) {
-        case `opcode`:
-          const opResult = this.collectTokens(_ => this.parseOpcodeLine(sym))
-          returnValue = {
-            type: `OpcodeLine`,
-            opcode: sym.text,
-            rhs: opResult.tokens,
-            generatedBytes: opResult.value,
-          }
-          break
+    switch (sym.type) {
+      case `NL`:
+      case `EOF`:
+      case `comment`:
+        break
 
-        case `directive`:
-          returnValue = this.parseDirectiveLine(sym)
-          break
+      case `opcode`:
+        const opResult = this.collectTokens(_ => this.parseOpcodeLine(sym))
+        returnValue = {
+          type: `OpcodeLine`,
+          opcode: sym.text,
+          rhs: opResult.tokens,
+          generatedBytes: opResult.value,
+        }
+        break
 
-        default:
-          error(sym, `Expecting an opcode or a directive after a label`)
-      }
+      case `directive`:
+        returnValue = this.parseDirectiveLine(sym)
+        break
 
-      if (sym.type === `comment`)  {
-        returnValue.comment = sym.value
-      }
-
+      default:
+        error(sym, `Expecting an opcode or a directive after a label`)
     }
+
+    if (sym.type === `comment`)  {
+      returnValue.comment = sym.value
+    }
+
     returnValue.labels = labels
     returnValue.address = address
     return returnValue

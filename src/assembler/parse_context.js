@@ -1,6 +1,7 @@
 import { SymbolTable } from "./symbol_table"
 import { otherError } from "./util"
 import { Memory, MemInstruction, MemOperand } from "./memory"
+import { octal } from "../helpers"
 
 export class ParseContext {
 
@@ -54,7 +55,7 @@ export class ParseContext {
       this.clc += 2
     }
     else
-      otherError(`Attempt to store a word at an odd address (0x$(this.clc.toString(8)})`)
+      otherError(`Attempt to store a word (${octal(value)}) at an odd address (${octal(this.clc)})`)
   }
 }
 
