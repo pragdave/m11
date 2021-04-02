@@ -9,6 +9,8 @@ const WORD_MASK = 0o177777
 const BIT7 = 0o000200
 const BYTE_MASK = 0o000377
 
+const Mask = [ 0, BYTE_MASK, WORD_MASK ]  // indexed by byte count
+
 export class Emulator {
 
   constructor(machine_state) {
@@ -171,7 +173,7 @@ export class Emulator {
         result = this.memory.getByteOrWord(addr, bytes)
         break
     }
-    return result
+    return result & Mask[bytes]
   }
 
   storeViaDD(dd, value, bytes, possibleOperand) {
@@ -182,10 +184,12 @@ export class Emulator {
     let addr
     let offset
 
+    value &= Mask[bytes]
+
     switch (mode) {
       case 0:   // Rn
         if (bytes === 1)
-          this.registers[rno] = (reg & ~0xff) || (value & 0xff)
+          this.registers[rno] = (reg & 0xff00) | (value & 0xff)
         else
           this.registers[rno] = value
         break
@@ -320,7 +324,7 @@ export class Emulator {
   }
 
   com(inst, op1) {
-    let value = ~this.fetchViaDD(inst, 2, op1) & WORD_MASK
+    const value = (~this.fetchViaDD(inst, 2, op1)) & WORD_MASK
     this.storeViaDD(inst, value, 2, op1)
     this.memory.psw.Z = value === 0
     this.memory.psw.N = value & BIT15
@@ -329,7 +333,7 @@ export class Emulator {
   }
 
   comb(inst, op1) {
-    let value = ~this.fetchViaDD(inst, 1, op1) & BYTE_MASK
+    const value = (~this.fetchViaDD(inst, 1, op1)) & BYTE_MASK
     this.storeViaDD(inst, value, 1, op1)
     this.memory.psw.Z = value === 0
     this.memory.psw.N = value & BIT7
@@ -337,10 +341,46 @@ export class Emulator {
     this.memory.psw.C = true
   }
 
-  inc(inst, op1)     { console.error(`missing`) }
-  incb(inst, op1)    { console.error(`missing`) }
-  dec(inst, op1)     { console.error(`missing`) }
-  decb(inst, op1)    { console.error(`missing`) }
+
+  inc(inst, op1)     {
+    let value = this.fetchViaDD(inst, 2, op1) 
+    this.memory.psw.V = value === 0o077777
+
+    value += 1
+    this.storeViaDD(inst, value, 2, op1)
+    this.memory.psw.Z = (value & WORD_MASK) === 0
+    this.memory.psw.N = value & BIT15
+  }
+
+  incb(inst, op1)     {
+    let value = this.fetchViaDD(inst, 1, op1) 
+    this.memory.psw.V = value === 0o000177
+    value += 1
+    this.storeViaDD(inst, value, 1, op1)
+    this.memory.psw.Z = (value & BYTE_MASK) === 0
+    this.memory.psw.N = value & BIT7
+  }
+
+  dec(inst, op1)     { 
+    let value = this.fetchViaDD(inst, 2, op1) 
+    this.memory.psw.V = value === 0o100000
+
+    value -= 1
+    this.storeViaDD(inst, value, 2, op1)
+    this.memory.psw.Z = (value & WORD_MASK) === 0
+    this.memory.psw.N = value & BIT15
+  }
+
+  decb(inst, op1)     { 
+    let value = this.fetchViaDD(inst, 1, op1) 
+    this.memory.psw.V = value === 0o000200
+
+    value -= 1
+    this.storeViaDD(inst, value, 1, op1)
+    this.memory.psw.Z = (value & BYTE_MASK) === 0
+    this.memory.psw.N = value & BIT7
+  }
+
   neg(inst, op1)     { console.error(`missing`) }
   negb(inst, op1)    { console.error(`missing`) }
   adc(inst, op1)     { console.error(`missing`) }

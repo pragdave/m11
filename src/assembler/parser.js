@@ -290,7 +290,7 @@ export class Parser {
     value *= sign
     if (complement)
       value = ~value
-    return value
+    return value & 0xffff
 
     //     'a
     //     "aa
