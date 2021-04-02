@@ -426,13 +426,51 @@ export class Emulator {
     this.memory.psw.C = false
   }
 
-  tstb(inst, op1)    { console.error(`missing`) }
   ror(inst, op1)     { console.error(`missing`) }
   rorb(inst, op1)    { console.error(`missing`) }
   rol(inst, op1)     { console.error(`missing`) }
   rolb(inst, op1)    { console.error(`missing`) }
-  asr(inst, op1)     { console.error(`missing`) }
-  asrb(inst, op1)    { console.error(`missing`) }
+
+  asr(inst, op1)     { 
+    let value = this.fetchViaDD(inst, 2, op1) 
+    this.memory.psw.C = (value & 1) === 1
+
+    if (value & BIT15) {
+      value = value >> 1
+      value = value | BIT15
+      this.memory.psw.N = true
+    }
+    else {
+      value = value >> 1
+      this.memory.psw.N = false
+    }
+
+    this.memory.psw.Z = value === 0
+    this.memory.psw.V = this.memory.psw.N ^ this.memory.psw.C
+
+    this.storeViaDD(inst, value, 2, op1)
+  }
+
+  asrb(inst, op1)     { 
+    let value = this.fetchViaDD(inst, 1, op1) 
+    this.memory.psw.C = (value & 1) === 1
+
+    if (value & BIT7) {
+      value = value >> 1
+      value = value | BIT7
+      this.memory.psw.N = true
+    }
+    else {
+      value = value >> 1
+      this.memory.psw.N = false
+    }
+
+    this.memory.psw.Z = value === 0
+    this.memory.psw.V = this.memory.psw.N ^ this.memory.psw.C
+
+    this.storeViaDD(inst, value, 1, op1)
+  }
+
   asl(inst, op1)     { console.error(`missing`) }
   aslb(inst, op1)    { console.error(`missing`) }
   mark(inst, op1)    { console.error(`missing`) }
