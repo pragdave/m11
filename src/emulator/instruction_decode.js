@@ -148,17 +148,3 @@ export const decodeTable =  [
 
 ]
 
-export function decode(emulator, instruction) {
-  for (let desc of decodeTable) {
-    const opcode = instruction & desc.mask
-    if (opcode || desc.mask === 0o177777) {
-      const handler = desc.opcodes[opcode]
-      if (handler) {
-        emulator[handler](instruction)
-        return
-      }
-    }
-  }
-
-  throw new Error(`Invalid instruction "0o${instruction.toString(8).padStart(6, `0`)}"`)
-}

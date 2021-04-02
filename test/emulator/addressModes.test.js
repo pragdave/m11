@@ -14,6 +14,7 @@ test(`register - register (word)`, () => {
   let r, m, psw
   
   [ r, m, psw ] = runner.step();
+  console.log(r, m, psw)
   expect([ r[0],r[1] ] ).toEqual([ 0o12345, 0]);
   [ r, m, psw ] = runner.step();
   expect([ r[0], r[1], r[2] ]).toEqual([ 0o12345, 0o12345, 0 ]);
@@ -394,7 +395,7 @@ test(`PC related (src)`, () => {
   
   [ r, m, psw ] = runner.step();
   expect(r[0]).toEqual(0o1234);
-
+debugger
   [ r, m, psw ] = runner.step();
   expect(r[1]).toEqual(0o1200);
   
@@ -422,7 +423,7 @@ start:  mov   #1234,  r0
 test(`PC related (dst)`, () => {
   const runner = assembleAndRun(t21)
   let r, m, psw
-  
+
   [ r, m, psw ] = runner.step(); //        mov   #1234,  r0
   expect(r[0]).toEqual(0o1234);
 
