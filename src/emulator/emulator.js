@@ -381,8 +381,30 @@ export class Emulator {
     this.memory.psw.N = value & BIT7
   }
 
-  neg(inst, op1)     { console.error(`missing`) }
-  negb(inst, op1)    { console.error(`missing`) }
+  neg(inst, op1)     { 
+    let value = this.fetchViaDD(inst, 2, op1) 
+    this.memory.psw.V = value === 0o100000
+
+    value = (-value)  & WORD_MASK
+
+    this.storeViaDD(inst, value, 2, op1)
+    this.memory.psw.Z = (value & WORD_MASK) === 0
+    this.memory.psw.N = value & BIT15
+    this.memory.psw.C = !this.memory.psw.Z
+  }
+
+  negb(inst, op1)     { 
+    let value = this.fetchViaDD(inst, 1, op1) 
+    this.memory.psw.V = value === 0o200
+
+    value = (-value)  & BYTE_MASK
+
+    this.storeViaDD(inst, value, 1, op1)
+    this.memory.psw.Z = (value & BYTE_MASK) === 0
+    this.memory.psw.N = value & BIT7
+    this.memory.psw.C = !this.memory.psw.Z
+  }
+
   adc(inst, op1)     { console.error(`missing`) }
   adcb(inst, op1)    { console.error(`missing`) }
   sbc(inst, op1)     { console.error(`missing`) }
