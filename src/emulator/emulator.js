@@ -409,7 +409,23 @@ export class Emulator {
   adcb(inst, op1)    { console.error(`missing`) }
   sbc(inst, op1)     { console.error(`missing`) }
   sbcb(inst, op1)    { console.error(`missing`) }
-  tst(inst, op1)     { console.error(`missing`) }
+  
+  tst(inst, op1)     {
+    let value = this.fetchViaDD(inst, 2, op1) 
+    this.memory.psw.N = value & BIT15
+    this.memory.psw.Z = (value & WORD_MASK) === 0
+    this.memory.psw.V = false
+    this.memory.psw.C = false
+  }
+
+  tstb(inst, op1)     {
+    let value = this.fetchViaDD(inst, 1, op1) 
+    this.memory.psw.N = value & BIT7
+    this.memory.psw.Z = (value & BYTE_MASK) === 0
+    this.memory.psw.V = false
+    this.memory.psw.C = false
+  }
+
   tstb(inst, op1)    { console.error(`missing`) }
   ror(inst, op1)     { console.error(`missing`) }
   rorb(inst, op1)    { console.error(`missing`) }
