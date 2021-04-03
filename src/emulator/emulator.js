@@ -471,8 +471,33 @@ export class Emulator {
     this.storeViaDD(inst, value, 1, op1)
   }
 
-  asl(inst, op1)     { console.error(`missing`) }
-  aslb(inst, op1)    { console.error(`missing`) }
+
+  asl(inst, op1)     { 
+    let value = this.fetchViaDD(inst, 2, op1) 
+    this.memory.psw.C = (value & BIT15) !== 0
+
+    value = (value << 1) & WORD_MASK
+
+    this.memory.psw.N = value & BIT15
+    this.memory.psw.Z = value === 0
+    this.memory.psw.V = this.memory.psw.N ^ this.memory.psw.C
+
+    this.storeViaDD(inst, value, 2, op1)
+  }
+
+  aslb(inst, op1)     { 
+    let value = this.fetchViaDD(inst, 1, op1) 
+    this.memory.psw.C = (value & BIT7) !== 0
+
+    value = (value << 1) & BYTE_MASK
+
+    this.memory.psw.N = value & BIT7
+    this.memory.psw.Z = value === 0
+    this.memory.psw.V = this.memory.psw.N ^ this.memory.psw.C
+
+    this.storeViaDD(inst, value, 1, op1)
+  }
+
   mark(inst, op1)    { console.error(`missing`) }
   mtps(inst, op1)    { console.error(`missing`) }
   mfpi(inst, op1)    { console.error(`missing`) }
