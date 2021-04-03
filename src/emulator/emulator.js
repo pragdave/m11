@@ -468,8 +468,44 @@ export class Emulator {
     this.storeViaDD(inst, value, 1, op1)
   }
 
-  rol(inst, op1)     { console.error(`missing`) }
-  rolb(inst, op1)    { console.error(`missing`) }
+  rol(inst, op1)     { 
+    const psw = this.memory.psw
+
+    let value = this.fetchViaDD(inst, 2, op1) 
+    const cbit = value & BIT15
+    value = (value << 1) & WORD_MASK
+
+    if (psw.C) {
+      value = value | 1
+    }
+
+    psw.N = value & BIT15
+    psw.C = cbit
+    psw.Z = value === 0
+    psw.V = psw.N ^ psw.C
+
+    this.storeViaDD(inst, value, 2, op1)
+  }
+  
+  rolb(inst, op1)     { 
+    const psw = this.memory.psw
+
+    let value = this.fetchViaDD(inst, 1, op1) 
+    const cbit = value & BIT7
+    value = (value << 1) & BYTE_MASK
+
+    if (psw.C) {
+      value = value | 1
+    }
+
+    psw.N = value & BIT7
+    psw.C = cbit
+    psw.Z = value === 0
+    psw.V = psw.N ^ psw.C
+
+    this.storeViaDD(inst, value, 1, op1)
+  }
+
 
   asr(inst, op1)     { 
     let value = this.fetchViaDD(inst, 2, op1) 
