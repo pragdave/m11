@@ -309,7 +309,23 @@ export class Emulator {
   sob(inst, op1)     { console.error(`missing`) }
 
   jmp(inst, op1)     { console.error(`missing`) }
-  swab(inst, op1)     { console.error(`missing`) }
+
+  swab(inst, op1)     { 
+    let psw = this.memory.psw
+    let value = this.fetchViaDD(inst, 2, op1) 
+
+    let lob = value & 0xff
+    value = (value >> 8) | (lob << 8)
+
+    this.storeViaDD(inst, value, 2, op1)
+
+    lob = value & 0xff
+    psw.N = lob & BIT7
+    psw.Z = lob === 0 
+    psw.V = false
+    psw.C = false
+  }
+
 
   clr(inst, op1, bytes = 2) { 
     this.storeViaDD(inst, 0, bytes, op1)
