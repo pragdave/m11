@@ -643,7 +643,14 @@ export class Emulator {
   mfpd(inst, op1) { console.error(`missing`) }
   mtpi(inst, op1) { console.error(`missing`) }
   mtpd(inst, op1) { console.error(`missing`) }
-  sxt(inst, op1)  { console.error(`missing`) }
+
+  sxt(inst, op1)  { 
+    let psw = this.memory.psw
+    this.storeViaDD(inst, psw.N ? 0o177777 : 0, 2, op1)
+    psw.Z = !psw.N
+  }
+
+
   mfps(inst, op1) { console.error(`missing`) }
 
   br(inst)   { console.error(`missing`) }
