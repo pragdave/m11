@@ -426,8 +426,48 @@ export class Emulator {
     this.memory.psw.C = false
   }
 
-  ror(inst, op1)     { console.error(`missing`) }
-  rorb(inst, op1)    { console.error(`missing`) }
+  ror(inst, op1)     { 
+    const psw = this.memory.psw
+
+    let value = this.fetchViaDD(inst, 2, op1) 
+    const cbit = value & 1
+    value >>= 1
+
+    if (psw.C) {
+      value = value | BIT15
+      psw.N = true
+    }
+    else
+      psw.N = false
+
+    psw.C = cbit
+    psw.Z = value === 0
+    psw.V = psw.N ^ psw.C
+
+    this.storeViaDD(inst, value, 2, op1)
+  }
+
+  rorb(inst, op1)     { 
+    const psw = this.memory.psw
+
+    let value = this.fetchViaDD(inst, 1, op1) 
+    const cbit = value & 1
+    value >>= 1
+
+    if (psw.C) {
+      value = value | BIT7
+      psw.N = true
+    }
+    else
+      psw.N = false
+
+    psw.C = cbit
+    psw.Z = value === 0
+    psw.V = psw.N ^ psw.C
+
+    this.storeViaDD(inst, value, 1, op1)
+  }
+
   rol(inst, op1)     { console.error(`missing`) }
   rolb(inst, op1)    { console.error(`missing`) }
 
@@ -498,30 +538,30 @@ export class Emulator {
     this.storeViaDD(inst, value, 1, op1)
   }
 
-  mark(inst, op1)    { console.error(`missing`) }
-  mtps(inst, op1)    { console.error(`missing`) }
-  mfpi(inst, op1)    { console.error(`missing`) }
-  mfpd(inst, op1)    { console.error(`missing`) }
-  mtpi(inst, op1)    { console.error(`missing`) }
-  mtpd(inst, op1)    { console.error(`missing`) }
-  sxt(inst, op1)     { console.error(`missing`) }
-  mfps(inst, op1)    { console.error(`missing`) }
+  mark(inst, op1) { console.error(`missing`) }
+  mtps(inst, op1) { console.error(`missing`) }
+  mfpi(inst, op1) { console.error(`missing`) }
+  mfpd(inst, op1) { console.error(`missing`) }
+  mtpi(inst, op1) { console.error(`missing`) }
+  mtpd(inst, op1) { console.error(`missing`) }
+  sxt(inst, op1)  { console.error(`missing`) }
+  mfps(inst, op1) { console.error(`missing`) }
 
   br(inst)   { console.error(`missing`) }
-  bne(inst)   { console.error(`missing`) }
-  beq(inst)   { console.error(`missing`) }
-  bge(inst)   { console.error(`missing`) }
-  blt(inst)   { console.error(`missing`) }
-  bgt(inst)   { console.error(`missing`) }
-  ble(inst)   { console.error(`missing`) }
-  bpl(inst)   { console.error(`missing`) }
-  bmi(inst)   { console.error(`missing`) }
-  bhi(inst)   { console.error(`missing`) }
-  blos(inst)   { console.error(`missing`) }
-  bvc(inst)   { console.error(`missing`) }
-  bvs(inst)   { console.error(`missing`) }
-  bcc(inst)   { console.error(`missing`) }
-  bcs(inst)   { console.error(`missing`) }
+  bne(inst)  { console.error(`missing`) }
+  beq(inst)  { console.error(`missing`) }
+  bge(inst)  { console.error(`missing`) }
+  blt(inst)  { console.error(`missing`) }
+  bgt(inst)  { console.error(`missing`) }
+  ble(inst)  { console.error(`missing`) }
+  bpl(inst)  { console.error(`missing`) }
+  bmi(inst)  { console.error(`missing`) }
+  bhi(inst)  { console.error(`missing`) }
+  blos(inst) { console.error(`missing`) }
+  bvc(inst)  { console.error(`missing`) }
+  bvs(inst)  { console.error(`missing`) }
+  bcc(inst)  { console.error(`missing`) }
+  bcs(inst)  { console.error(`missing`) }
   
 
   jsr(inst, op1)   { console.error(`missing`) }
@@ -532,8 +572,21 @@ export class Emulator {
   trap(inst)     { console.error(`missing`) }
 
 
-  ccc(inst)     { console.error(`missing`) }
-  scc(inst)     { console.error(`missing`) }
+  ccc(inst)     { 
+    const psw = this.memory.psw
+    if (inst & 0b1000) psw.N = false
+    if (inst & 0b0100) psw.Z = false
+    if (inst & 0b0010) psw.V = false
+    if (inst & 0b0001) psw.C = false
+  }
+
+  scc(inst)     { 
+    const psw = this.memory.psw
+    if (inst & 0b1000) psw.N = true
+    if (inst & 0b0100) psw.Z = true
+    if (inst & 0b0010) psw.V = true
+    if (inst & 0b0001) psw.C = true
+  }
 
   rti(inst)     { console.error(`missing`) }
   bpt(inst)     { console.error(`missing`) }

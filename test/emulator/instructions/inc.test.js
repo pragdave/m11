@@ -124,11 +124,7 @@ test(`basic incb`, () => {
   expect([ r[0], psw ]).toEqual([ 0o177400, `•Z••`]);
 
   [ r, m, psw ] = runner.step();  // 0o077577
-  console.log("r0", r[0].toString(8));
-  debugger
   [ r, m, psw ] = runner.step();
-  console.log("r0", r[0].toString(8));
-
   expect([ r[0], psw ]).toEqual([ 0o077600, `N•V•`]);
 
   [ r, m, psw ] = runner.step();  // # -2
