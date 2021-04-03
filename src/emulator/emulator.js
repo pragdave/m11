@@ -421,11 +421,58 @@ export class Emulator {
     this.memory.psw.C = !this.memory.psw.Z
   }
 
-  adc(inst, op1)     { console.error(`missing`) }
-  adcb(inst, op1)    { console.error(`missing`) }
-  sbc(inst, op1)     { console.error(`missing`) }
-  sbcb(inst, op1)    { console.error(`missing`) }
-  
+  adc(inst, op1)     { 
+    const psw = this.memory.psw
+    let value = this.fetchViaDD(inst, 2, op1) 
+    if (psw.C) {
+      psw.V = value === 0o077777
+      psw.C = value === 0o177777 
+      value = (value + 1) & WORD_MASK
+      this.storeViaDD(inst, value, 2, op1)
+    }
+    psw.N = value & BIT15
+    psw.Z = value === 0
+  }
+
+  adcb(inst, op1)     { 
+    const psw = this.memory.psw
+    let value = this.fetchViaDD(inst, 2, op1) 
+    if (psw.C) {
+      psw.V = value === 0o077777
+      psw.C = value === 0o177777 
+      value = (value + 1) & WORD_MASK
+      this.storeViaDD(inst, value, 2, op1)
+    }
+    psw.N = value & BIT15
+    psw.Z = value === 0
+  }
+
+  sbc(inst, op1)     { 
+    const psw = this.memory.psw
+    let value = this.fetchViaDD(inst, 2, op1) 
+    if (psw.C) {
+      psw.V = value === 0o100000
+      psw.C = value !== 0
+      value = (value - 1) & WORD_MASK
+      this.storeViaDD(inst, value, 2, op1)
+    }
+    psw.N = value & BIT15
+    psw.Z = value === 0
+  }
+
+  sbcb(inst, op1)     { 
+    const psw = this.memory.psw
+    let value = this.fetchViaDD(inst, 1, op1) 
+    if (psw.C) {
+      psw.V = value === 0o000200
+      psw.C = value !== 0o000000
+      value = (value - 1) & BYTE_MASK
+      this.storeViaDD(inst, value, 1, op1)
+    }
+    psw.N = value & BIT7 
+    psw.Z = value === 0
+  }
+
   tst(inst, op1)     {
     let value = this.fetchViaDD(inst, 2, op1) 
     this.memory.psw.N = value & BIT15

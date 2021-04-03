@@ -10,23 +10,23 @@ start:  mov   #123000, r0
         .end  start
 `
 
-test(`basic rol`, () => {
+test(`basic swab`, () => {
   const runner = assembleAndRun(t1)
   let r, m, psw
 
   [ r, m, psw ] = runner.step();
   [ r, m, psw ] = runner.step();
-  expect([ r[0], psw ]).toEqual([ 0o000246, `N•••` ]);
+  expect([ r[0], psw ]).toequal([ 0o000246, `n•••` ]);
 
   [ r, m, psw ] = runner.step();
-  expect([ r[0], psw ]).toEqual([ 0o123000, `•Z••` ]);
+  expect([ r[0], psw ]).toequal([ 0o123000, `•z••` ]);
 
   [ r, m, psw ] = runner.step();
   [ r, m, psw ] = runner.step();
-  expect([ r[0], psw ]).toEqual([ 0o000600, `N•••` ]);
+  expect([ r[0], psw ]).toequal([ 0o000600, `n•••` ]);
 
   [ r, m, psw ] = runner.step();
-  expect([ r[0], psw ]).toEqual([ 0o100001, `••••` ]);
+  expect([ r[0], psw ]).toequal([ 0o100001, `••••` ]);
 })
 
 
