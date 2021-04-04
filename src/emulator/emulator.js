@@ -4,12 +4,24 @@ import { octal, saddw } from "../helpers"
 const SP = 6, PC = 7
 
 const BIT15 = 0o100000
+const BIT14 = 0o040000
 const WORD_MASK = 0o177777
 
 const BIT7 = 0o000200
 const BYTE_MASK = 0o000377
 
 const Mask = [ 0, BYTE_MASK, WORD_MASK ]  // indexed by byte count
+
+function additiveOverflow(src, dst, result) {
+  return ((src & BIT15) === (dst & BIT15)) &&   // different sign
+          ((dst & BIT15) !== (result & BIT15)) // dst same as result
+}
+
+function subtractiveOverflow(minuend, subtrahend, result) {
+  return ((minuend & BIT15) ^ (subtrahend & BIT15)) &&   // different sign
+          ((subtrahend & BIT15) === (result & BIT15)) // subtrahend same as result
+}
+
 
 export class Emulator {
 
@@ -247,6 +259,7 @@ export class Emulator {
     }
   }
 
+
   ////////////////////////////////////////////////////////////////////////////////
   //
   // The instructions, ordered by operand field length 
@@ -281,14 +294,14 @@ export class Emulator {
   }
 
   cmp(inst, op1, op2)     { 
+    const psw = this.memory.psw
     const src = this.fetchViaDD((inst >> 6) & 0o77, 2, op1)
     const dst = this.fetchViaDD(inst, 2, op2)
     const result = src + ~dst + 1
-    this.memory.psw.N = result & BIT15
-    this.memory.psw.Z = !(result & WORD_MASK)
-    this.memory.psw.V = ((src & BIT15) ^ (dst & BIT15)) &&   // different sign
-      ((dst & BIT15) === (result & BIT15)) // dst same as result
-    this.memory.psw.O = result & ~WORD_MASK
+    psw.N = result & BIT15
+    psw.Z = (result & WORD_MASK) === 0
+    this.memory.psw.V = subtractiveOverflow(src, dst, result)
+    this.memory.psw.C = result & ~WORD_MASK
   }
   
   cmpb(inst, op1, op2)    { console.error(`missing`) }
@@ -298,8 +311,33 @@ export class Emulator {
   bicb(inst, op1, op2)    { console.error(`missing`) }
   bis(inst, op1, op2)     { console.error(`missing`) }
   bisb(inst, op1, op2)    { console.error(`missing`) }
-  add(inst, op1, op2)     { console.error(`missing`) }
-  sub(inst, op1, op2)     { console.error(`missing`) }
+
+  add(inst, op1, op2)     { 
+    const psw = this.memory.psw
+    const src = this.fetchViaDD((inst >> 6) & 0o77, 2, op1)
+    const dst = this.fetchViaDD(inst, 2, op2)
+    const result = src + dst
+
+    psw.Z = (result & WORD_MASK) === 0
+    psw.N = (result & BIT15) 
+    psw.V = additiveOverflow(src, dst, result)
+    psw.C = (result & ~WORD_MASK)
+    this.storeViaDD(inst, result, 2, op2)
+  }
+
+  sub(inst, op1, op2)     { 
+    const psw = this.memory.psw
+    const src = this.fetchViaDD((inst >> 6) & 0o77, 2, op1)
+    const dst = this.fetchViaDD(inst, 2, op2)
+    const result = dst - src
+
+    psw.Z = (result & WORD_MASK) === 0
+    psw.N = (result & BIT15) 
+    psw.V = subtractiveOverflow(dst, src, result)
+    psw.C = (result & ~WORD_MASK)
+    this.storeViaDD(inst, result, 2, op2)
+    console.log(octal(src), octal(dst), octal(result))
+  }
 
   mul(inst, op1)     { console.error(`missing`) }
   div(inst, op1)     { console.error(`missing`) }
