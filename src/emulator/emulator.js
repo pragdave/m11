@@ -17,9 +17,9 @@ function additiveOverflow(src, dst, result) {
           ((dst & BIT15) !== (result & BIT15)) // dst same as result
 }
 
-function subtractiveOverflow(minuend, subtrahend, result) {
-  return ((minuend & BIT15) ^ (subtrahend & BIT15)) &&   // different sign
-          ((subtrahend & BIT15) === (result & BIT15)) // subtrahend same as result
+function subtractiveOverflow(minuend, subtrahend, result, msb = BIT7) {
+  return ((minuend & msb) ^ (subtrahend & msb)) &&   // different sign
+          ((subtrahend & msb) === (result & msb)) // subtrahend same as result
 }
 
 
@@ -304,7 +304,17 @@ export class Emulator {
     this.memory.psw.C = result & ~WORD_MASK
   }
   
-  cmpb(inst, op1, op2)    { console.error(`missing`) }
+  cmpb(inst, op1, op2)     { 
+    const psw = this.memory.psw
+    const src = this.fetchViaDD((inst >> 6) & 0o77, 1, op1)
+    const dst = this.fetchViaDD(inst, 1, op2)
+    const result = src + ~dst + 1
+    psw.N = result & BIT7
+    psw.Z = (result & BYTE_MASK) === 0
+    this.memory.psw.V = subtractiveOverflow(src, dst, result, BIT7)
+    this.memory.psw.C = result & ~BYTE_MASK
+  }
+  
   bit(inst, op1, op2)     { console.error(`missing`) }
   bitb(inst, op1, op2)    { console.error(`missing`) }
   bic(inst, op1, op2)     { console.error(`missing`) }
