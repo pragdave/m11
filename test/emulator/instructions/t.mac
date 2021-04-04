@@ -1,0 +1,15 @@
+s: ccc
+cmp #100000,#0
+mov 177776, r0
+halt
+cmp #0, #100000
+mov 177776, r0
+halt
+cmp #177776, #177777
+mov 177776, r0
+halt
+cmp #177777, #177776
+mov 177776, r0
+halt
+emt
+.end s

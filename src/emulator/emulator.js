@@ -315,8 +315,28 @@ export class Emulator {
     this.memory.psw.C = result & ~BYTE_MASK
   }
   
-  bit(inst, op1, op2)     { console.error(`missing`) }
-  bitb(inst, op1, op2)    { console.error(`missing`) }
+  bit(inst, op1, op2)     { 
+    const psw = this.memory.psw
+    const src = this.fetchViaDD((inst >> 6) & 0o77, 2, op1)
+    const dst = this.fetchViaDD(inst, 2, op2)
+    const value = src & dst
+    psw.N = value & BIT15
+    psw.Z = value === 0
+    psw.V = false
+    // psw.C not affected
+  }
+
+  bitb(inst, op1, op2)     { 
+    const psw = this.memory.psw
+    const src = this.fetchViaDD((inst >> 6) & 0o77, 1, op1)
+    const dst = this.fetchViaDD(inst, 1, op2)
+    const value = src & dst
+    psw.N = value & BIT7
+    psw.Z = value === 0
+    psw.V = false
+    // psw.C not affected
+  }
+
   bic(inst, op1, op2)     { console.error(`missing`) }
   bicb(inst, op1, op2)    { console.error(`missing`) }
   bis(inst, op1, op2)     { console.error(`missing`) }
