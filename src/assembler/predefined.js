@@ -27,7 +27,8 @@ export const Operators = {
   div:  { fmt: `TwoOp2`, op: 0o071000, desc: `Divide: Compute (Reg, Reg+1) ÷ Src; Reg ← quotient; Reg+1 ← remainder` },
   ash:  { fmt: `TwoOp2`, op: 0o072000, desc: `Arithmetic shift: if Src<5:0> < 0 then Reg ← Shift-right(Reg, -Src<5:0>) else Reg ← Shift-left(Reg, Src<5:0>)` },
   ashc: { fmt: `TwoOp2`, op: 0o073000, desc: `Arithmetic shift combined: if Src<5:0> < 0 then (Reg, Reg+1) ← Shift-right((Reg, Reg+1), -Src<5:0>) else (Reg, Reg+1) ← Shift-left((Reg, Reg+1), Src<5:0>)` },
-  xor:  { fmt: `TwoOp2`, op: 0o074000, desc: `Exclusive or: Dest ← Dest ⊻ Reg` },
+
+  xor:  { fmt: `TwoOp3`, op: 0o074000, desc: `Exclusive or: Dest ← Dest ⊻ Reg` },
 
   // 15									6	5		3	2		0
   // Opcode	Src/Dest	Register

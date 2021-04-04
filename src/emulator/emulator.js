@@ -441,10 +441,57 @@ export class Emulator {
     psw.C = (result < -32768) || (result > 32767)
   }
 
-  div(inst, op1)     { console.error(`missing div`) }
+  div(inst, op1, rno, reg)     { 
+    const psw = this.memory.psw
+    let src = this.fetchViaDD(inst, 2, op1)
+    if (rno & 1) 
+      throw new Error(`Register for DIV instruction must be even (got R${rno}})`)
+
+    if (reg & BIT15)
+      reg -= 65536
+
+    const dividend = (reg << 16) | this.registers[rno + 1]
+
+    if (src & BIT15)
+      src -= 65536
+
+    if (src === 0) {
+      psw.C = true
+      psw.V = true
+    }
+    else {
+      // don't know if I need to force integer cooercion
+      const quotient = Math.floor(dividend / src) >> 0  
+      const remainder = dividend % src
+
+      if (Math.abs(quotient > 32767)) {
+        psw.V = true
+      }
+      
+      this.registers[rno] = quotient & 0xffff
+      this.registers[rno + 1] = remainder
+
+      psw.N = quotient < 0
+      psw.Z = quotient === 0
+    }
+
+  }
+
   ash(inst, op1)     { console.error(`missing ash`) }
   ashc(inst, op1)    { console.error(`missing ashc`) }
-  xor(inst, op1)     { console.error(`missing xor`) }
+
+  xor(inst, op1, _rno, reg) {
+    const psw = this.memory.psw
+    const dst = this.fetchViaDD(inst, 2, op1)
+    const result = reg ^ dst
+    this.storeViaDD(inst, result, 2, op1)
+
+    psw.N = result & BIT15
+    psw.Z = result === 0
+    psw.V = false
+    // psw.C unchanged
+    
+  }
   sob(inst, op1)     { console.error(`missing sob`) }
 
   jmp(inst, op1)     { console.error(`missing JMP`) }

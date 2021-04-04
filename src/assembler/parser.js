@@ -385,11 +385,23 @@ export class Parser {
     }
   }
 
-  parseTwoOp2(operator) {
+  parseTwoOp2(operator) { // register comes second
     const extraWords = []
     const op1 = this.parseDD(operator, extraWords)
     this.expect(`comma`)
     const reg = this.expect(`register`, ``)
+
+    return {
+      opEncoding: Registers[reg.text] << 6 | op1,
+      extraWords,
+    }
+  }
+
+  parseTwoOp3(operator) { // register comes first
+    const extraWords = []
+    const reg = this.expect(`register`, ``)
+    this.expect(`comma`)
+    const op1 = this.parseDD(operator, extraWords)
 
     return {
       opEncoding: Registers[reg.text] << 6 | op1,
@@ -485,6 +497,9 @@ export class Parser {
         break
       case `TwoOp2`: 
         operands = this.parseTwoOp2(operator)
+        break
+      case `TwoOp3`: 
+        operands = this.parseTwoOp3(operator)
         break
       case `Branch`: 
         operands = this.parseBranch(operator)
