@@ -78,7 +78,10 @@ export class Emulator {
   }
 
   decode_one_and_a_half(handler, instruction) {
-    throw `missing`
+    const op = this.fetchNextWordIfNeeded(instruction) 
+    const rno = (instruction >> 6) & 7
+    let reg = this.registers[rno]
+    this[handler](instruction, op, rno, reg)
     return handler // just until all opcodes implemented
   }
 
@@ -323,7 +326,7 @@ export class Emulator {
     psw.N = value & BIT15
     psw.Z = value === 0
     psw.V = false
-    // psw.C not affected
+    // psw.C not affected 
   }
 
   bitb(inst, op1, op2)     { 
@@ -412,14 +415,39 @@ export class Emulator {
     console.log(octal(src), octal(dst), octal(result))
   }
 
-  mul(inst, op1)     { console.error(`missing`) }
-  div(inst, op1)     { console.error(`missing`) }
-  ash(inst, op1)     { console.error(`missing`) }
-  ashc(inst, op1)    { console.error(`missing`) }
-  xor(inst, op1)     { console.error(`missing`) }
-  sob(inst, op1)     { console.error(`missing`) }
+  mul(inst, op1, rno, reg)     { 
+    const psw = this.memory.psw
+    let src = this.fetchViaDD(inst, 2, op1)
 
-  jmp(inst, op1)     { console.error(`missing`) }
+    // convert emulator -ve to actual -ve
+    if (reg & BIT15) 
+      reg = reg - 65536
+    if (src & BIT15)
+      src = src - 65536
+
+    const result = reg * src
+
+    if (rno & 1) {
+      this.registers[rno] = result & 0xffff
+    }
+    else {
+      this.registers[rno] = (result >> 16) & 0xffff
+      this.registers[rno + 1] = result & 0xffff
+    }
+
+    psw.N = result < 0 
+    psw.Z = result === 0
+    psw.V = false
+    psw.C = (result < -32768) || (result > 32767)
+  }
+
+  div(inst, op1)     { console.error(`missing div`) }
+  ash(inst, op1)     { console.error(`missing ash`) }
+  ashc(inst, op1)    { console.error(`missing ashc`) }
+  xor(inst, op1)     { console.error(`missing xor`) }
+  sob(inst, op1)     { console.error(`missing sob`) }
+
+  jmp(inst, op1)     { console.error(`missing JMP`) }
 
   swab(inst, op1)     { 
     let psw = this.memory.psw
@@ -748,12 +776,12 @@ export class Emulator {
     this.storeViaDD(inst, value, 1, op1)
   }
 
-  mark(inst, op1) { console.error(`missing`) }
-  mtps(inst, op1) { console.error(`missing`) }
-  mfpi(inst, op1) { console.error(`missing`) }
-  mfpd(inst, op1) { console.error(`missing`) }
-  mtpi(inst, op1) { console.error(`missing`) }
-  mtpd(inst, op1) { console.error(`missing`) }
+  mark(inst, op1) { console.error(`missing mark`) }
+  mtps(inst, op1) { console.error(`missing mtps`) }
+  mfpi(inst, op1) { console.error(`missing mfpi`) }
+  mfpd(inst, op1) { console.error(`missing mfpd`) }
+  mtpi(inst, op1) { console.error(`missing mtpi`) }
+  mtpd(inst, op1) { console.error(`missing mtpd`) }
 
   sxt(inst, op1)  { 
     let psw = this.memory.psw
@@ -762,31 +790,31 @@ export class Emulator {
   }
 
 
-  mfps(inst, op1) { console.error(`missing`) }
+  mfps(inst, op1) { console.error(`missing mpfs`) }
 
-  br(inst)   { console.error(`missing`) }
-  bne(inst)  { console.error(`missing`) }
-  beq(inst)  { console.error(`missing`) }
-  bge(inst)  { console.error(`missing`) }
-  blt(inst)  { console.error(`missing`) }
-  bgt(inst)  { console.error(`missing`) }
-  ble(inst)  { console.error(`missing`) }
-  bpl(inst)  { console.error(`missing`) }
-  bmi(inst)  { console.error(`missing`) }
-  bhi(inst)  { console.error(`missing`) }
-  blos(inst) { console.error(`missing`) }
-  bvc(inst)  { console.error(`missing`) }
-  bvs(inst)  { console.error(`missing`) }
-  bcc(inst)  { console.error(`missing`) }
-  bcs(inst)  { console.error(`missing`) }
+  br(inst)   { console.error(`missing br`) }
+  bne(inst)  { console.error(`missing bne`) }
+  beq(inst)  { console.error(`missing beq`) }
+  bge(inst)  { console.error(`missing bge`) }
+  blt(inst)  { console.error(`missing blt`) }
+  bgt(inst)  { console.error(`missing bgt`) }
+  ble(inst)  { console.error(`missing ble`) }
+  bpl(inst)  { console.error(`missing bpl`) }
+  bmi(inst)  { console.error(`missing bmi`) }
+  bhi(inst)  { console.error(`missing bhi`) }
+  blos(inst) { console.error(`missing blos`) }
+  bvc(inst)  { console.error(`missing bvc`) }
+  bvs(inst)  { console.error(`missing bvs`) }
+  bcc(inst)  { console.error(`missing bcc`) }
+  bcs(inst)  { console.error(`missing bcs`) }
   
 
-  jsr(inst, op1)   { console.error(`missing`) }
+  jsr(inst, op1)   { console.error(`missing jsr`) }
 
-  rts(inst)   { console.error(`missing`) }
+  rts(inst)   { console.error(`missing rts`) }
 
-  emt(inst)     { console.error(`missing`) }
-  trap(inst)     { console.error(`missing`) }
+  emt(inst)     { console.error(`missing emt`) }
+  trap(inst)     { console.error(`missing trap`) }
 
 
   ccc(inst)     { 
@@ -805,12 +833,12 @@ export class Emulator {
     if (inst & 0b0001) psw.C = true
   }
 
-  rti(inst)     { console.error(`missing`) }
-  bpt(inst)     { console.error(`missing`) }
-  iot(inst)     { console.error(`missing`) }
-  rtt(inst)     { console.error(`missing`) }
-  halt(inst)    { console.error(`missing`) }
-  wait(inst)    { console.error(`missing`) }
-  reset(inst)   { console.error(`missing`) }
+  rti(inst)     { console.error(`missing rti`) }
+  bpt(inst)     { console.error(`missing bpt`) }
+  iot(inst)     { console.error(`missing iot`) }
+  rtt(inst)     { console.error(`missing rtt`) }
+  halt(inst)    { console.error(`missing halt`) }
+  wait(inst)    { console.error(`missing wait`) }
+  reset(inst)   { console.error(`missing reset`) }
 
 }

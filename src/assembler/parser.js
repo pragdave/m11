@@ -387,12 +387,12 @@ export class Parser {
 
   parseTwoOp2(operator) {
     const extraWords = []
-    const reg = this.expect(`register`, ``)
+    const op1 = this.parseDD(operator, extraWords)
     this.expect(`comma`)
-    const op2 = this.parseDD(operator, extraWords)
+    const reg = this.expect(`register`, ``)
 
     return {
-      opEncoding: Registers[reg.text] << 6 | op2,
+      opEncoding: Registers[reg.text] << 6 | op1,
       extraWords,
     }
   }
