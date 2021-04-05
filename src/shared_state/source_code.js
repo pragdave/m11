@@ -37,8 +37,12 @@ class CodegenLine extends JustLabelsLine {
 
 export class SourceCode {
   constructor(original_code) {
-    this.sourceLines = []
     this.original_code = original_code
+    this.reset()
+  }
+
+  reset() {
+    this.sourceLines = []
     this.start_address = 0o1000
   }
 

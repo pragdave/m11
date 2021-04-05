@@ -3,6 +3,7 @@ import { Lexer } from "./lexer.js"
 import { MemData, MemFillData } from "./memory"
 import { Operators, Registers } from "./predefined.js"
 import { ParseContext } from "./parse_context"
+import { SourceCode } from "../shared_state/source_code" 
 
 import { error, otherError, listForExtras } from "./util"
 
@@ -49,15 +50,43 @@ function convertAssembledToSource(assembled) {
 }
 
 export class Parser {
-  constructor(source_holder) {
+  constructor(source) {
     this.context = new ParseContext()
     this.lexer = new Lexer()
-    this.code = source_holder.original_code
-    this.holder = source_holder
-    this.lexer.analyze(this.code)
+    this.lexer.analyze(source)
+    this.holder = new SourceCode(source)
+  }
+
+  assemble() {
+    this.passNumber = 1
+    this.doAPass()
+
+    if (this.context.hasForwardReferences())
+      this.doAPass()
+   
+    return this.holder
+  }
+
+  doAPass() {
+    this.context.resetBeforePass()
+    this.lexer.rewind()
+    this.holder.reset()
+
+    console.log(`Pass:`, this.passNumber++)
+
     while (this.lexer.moreToCome()) {
       const line = this.parseLine()
       this.holder.createAndAddLine(line)
+    }
+    const unresolved = this.context.unresolvedForwardReferences()
+    const unresolvedNames = Object.keys(unresolved)
+
+    if (unresolvedNames.length > 0) {
+      const msg1 = `The following symbols are not defined. (The number following ` +
+        `the name is the last line on which it was seen)\n`
+      const msg2 = unresolvedNames.map(key => `\t${key}: ${unresolved[key]}\n`).join(`\n`)
+
+      throw new Error(msg1 + msg2)
     }
   }
 
@@ -209,9 +238,13 @@ export class Parser {
           value |= t 
           break
         default:
-          error(op, `invalid binarey operartor`)
+          error(op, `invalid binary operator`)
       }
     }
+    
+    if (isNaN(value))
+      return value
+
     return value & 0xffff
   }
 
@@ -261,10 +294,13 @@ export class Parser {
 
       case `symbol`:
         const sym = this.lookupSymbol(next.text)
+        console.log("lookup", next.text, sym)
         if (sym && sym.isDefined())
           value = sym.value
-        else
+        else {
           value = NaN
+          this.context.addForwardReference(next.text, next.line)
+        }
         break
 
       case `single_char`:
@@ -286,6 +322,9 @@ export class Parser {
         break
 
     }
+
+    if (isNaN(value))
+      return value
 
     value *= sign
     if (complement)
@@ -412,8 +451,15 @@ export class Parser {
   parseBranch(_operator) {
     const target = this.next()
     let offset = this.parseExpression(target)
+    console.log("original poffset", offset)
+    if (isNaN(offset)) { // forward reference: replace with . for now
+      offset = this.context.clc + 2 
+      console.log("forward reference to ", target)
+    }
+
     offset -= (this.context.clc + 2)
     offset /= 2
+    console.log("final offset = ", offset)
     if (offset < -128 || offset > 127)
       error(target, `is too far away from this instruction (its offset is ${offset} words, ` +
         `and we're limited to an offset between -128 and +127 words`)

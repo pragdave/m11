@@ -93,8 +93,13 @@ export class Emulator {
   }
 
   decode_branch(handler, instruction) {
-    throw `missing`
-    return handler // just until all opcodes implemented
+    let offset = instruction & 0xff
+    if (offset & 0x80) 
+      offset -= 256
+
+    const newPC = this.registers[PC] + 2 * offset
+
+    this[handler](instruction, newPC)
   }
 
   decode_jsr(handler, instruction) {
@@ -492,6 +497,8 @@ export class Emulator {
     // psw.C unchanged
     
   }
+
+
   sob(inst, op1)     { console.error(`missing sob`) }
 
   jmp(inst, op1)     { console.error(`missing JMP`) }
@@ -839,7 +846,10 @@ export class Emulator {
 
   mfps(inst, op1) { console.error(`missing mpfs`) }
 
-  br(inst)   { console.error(`missing br`) }
+  br(_inst, newPC)   {
+    this.registers[PC] = newPC
+  }
+
   bne(inst)  { console.error(`missing bne`) }
   beq(inst)  { console.error(`missing beq`) }
   bge(inst)  { console.error(`missing bge`) }

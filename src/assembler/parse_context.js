@@ -6,10 +6,15 @@ import { octal } from "../helpers"
 export class ParseContext {
 
   constructor() {
-    this.generated = {}
-    this.memory = new Memory
     this.symbols = new SymbolTable()
     this.symbols.addLabel(`.`, 0o1000)
+  }
+
+  resetBeforePass() {
+    this.generated = {}
+    this.forward_references = {}
+    this.memory = new Memory()
+    this.symbols.setValueOf(`.`, 0o1000)
   }
 
   get clc() { return this.symbols.getValueOf(`.`) }
@@ -43,6 +48,24 @@ export class ParseContext {
     }
 
     return allWords
+  }
+
+  addForwardReference(symbol, lineNo) {
+    this.forward_references[symbol] = lineNo
+  }
+
+  hasForwardReferences() {
+    return Object.keys(this.forward_references).length > 0
+  }
+
+  unresolvedForwardReferences() {
+    const result = {}
+
+    for (let k of Object.keys(this.forward_references)) {
+      if (!this.lookupSymbol(k))
+        result[k] = this.forward_references[k]
+    }
+    return result
   }
 
   storeByteInMemory(value, _type) {

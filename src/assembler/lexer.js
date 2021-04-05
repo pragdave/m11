@@ -54,6 +54,10 @@ export class Lexer {
   analyze(text) {
     this.lexer.reset(text)
     this.tokens = Array.from(this.lexer)
+    this.rewind()
+  }
+
+  rewind() {
     this.offset = 0
   }
 

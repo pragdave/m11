@@ -46,7 +46,9 @@ export class SymbolTable {
 
   addValue(name, value, type) {
     if (name !== `.` && name in this.symbols) {
-      otherError(`Duplicate symbol "${name}" not allowed`)
+      if (this.symbols[name].value !== value) {
+        otherError(`Symbol "${name}" has multiple values (maybe a duplicate definition?)`)
+      }
     }
     else {
       this.symbols[name] = new Symbol(name, value, type)
