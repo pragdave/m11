@@ -16,17 +16,17 @@ test(`basic swab`, () => {
 
   [ r, m, psw ] = runner.step();
   [ r, m, psw ] = runner.step();
-  expect([ r[0], psw ]).toequal([ 0o000246, `n•••` ]);
+  expect([ r[0], psw ]).toEqual([ 0o000246, `N•••` ]);
 
   [ r, m, psw ] = runner.step();
-  expect([ r[0], psw ]).toequal([ 0o123000, `•z••` ]);
+  expect([ r[0], psw ]).toEqual([ 0o123000, `•Z••` ]);
 
   [ r, m, psw ] = runner.step();
   [ r, m, psw ] = runner.step();
-  expect([ r[0], psw ]).toequal([ 0o000600, `n•••` ]);
+  expect([ r[0], psw ]).toEqual([ 0o000600, `N•••` ]);
 
   [ r, m, psw ] = runner.step();
-  expect([ r[0], psw ]).toequal([ 0o100001, `••••` ]);
+  expect([ r[0], psw ]).toEqual([ 0o100001, `••••` ]);
 })
 
 

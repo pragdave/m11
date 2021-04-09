@@ -1,11 +1,11 @@
-import { octal } from "../helpers"
+// impor { octal } from "../helpers"
 import { Lexer } from "./lexer.js"
 import { MemData, MemFillData } from "./memory"
 import { Operators, Registers } from "./predefined.js"
 import { ParseContext } from "./parse_context"
 import { SourceCode } from "../shared_state/source_code" 
 
-import { error, otherError, listForExtras } from "./util"
+import { ParseError, error, otherError, listForExtras } from "./util"
 
 function optionalComment(line) {
   if (line.comment)
@@ -39,7 +39,10 @@ function convertOneLine(line) {
     case `CodegenLine`:
       // eslint-disable-next-line max-len
       return `${t(labels(line.labels))}${t(line.opcode)}${t(tokens(line.rhs))}${optionalComment(line)}`
-    
+
+    case `ErrorLine`:
+      return line.lineText
+
     default:
       throw new Error(`unhandled line type ${line.type}`)
   }
@@ -58,12 +61,12 @@ export class Parser {
   }
 
   assemble() {
-    this.passNumber = 1
+    this.passNumber = 0
     this.doAPass()
 
     if (this.context.hasForwardReferences())
       this.doAPass()
-   
+
     return this.holder
   }
 
@@ -72,22 +75,16 @@ export class Parser {
     this.lexer.rewind()
     this.holder.reset()
 
-    console.log(`Pass:`, this.passNumber++)
+    //    console.log(`Pass:`, this.passNumber)
+    this.passNumber++
 
     while (this.lexer.moreToCome()) {
       const line = this.parseLine()
-      this.holder.createAndAddLine(line)
+      if (line)
+        this.holder.createAndAddLine(line)
     }
-    const unresolved = this.context.unresolvedForwardReferences()
-    const unresolvedNames = Object.keys(unresolved)
 
-    if (unresolvedNames.length > 0) {
-      const msg1 = `The following symbols are not defined. (The number following ` +
-        `the name is the last line on which it was seen)\n`
-      const msg2 = unresolvedNames.map(key => `\t${key}: ${unresolved[key]}\n`).join(`\n`)
-
-      throw new Error(msg1 + msg2)
-    }
+    this.holder.recordUnresolvedNames(this.context.unresolvedForwardReferences())
   }
 
   static sourceFromAssembled(assembled) {
@@ -103,6 +100,11 @@ export class Parser {
     return (sym.type === symType)
   }
 
+  lookingAtWS() {
+    const sym = this.lexer.peek()
+    return (sym.type === `WS`)
+  }
+
   accept(symType) {
     if (this.lookingAt(symType))
       return this.lexer.next()
@@ -115,7 +117,7 @@ export class Parser {
     if (sym.type === symType)
       return sym
 
-    otherError(`expected ${symType} but got ${sym.type} ${context}`)
+    error(sym, `expected ${symType} but got ${sym.type} ${context}`)
   }
 
   next() {
@@ -128,6 +130,12 @@ export class Parser {
 
   peek() {
     return this.lexer.peekNotWS()
+  }
+
+  swallowRestOfLine() {
+    let sym = this.lexer.peek()
+    while (sym && sym.type !== `NL` && sym.type !== `EOF`)
+      sym = this.next()
   }
 
   // Interface to symbol table
@@ -148,65 +156,89 @@ export class Parser {
   // Parsing
 
   parseLine() {
-    let sym = this.next()
-    let result = {}
-    if (!sym)
-      return
-
     let sol = this.lexer.position()
 
-    switch (sym.type) {
-      case `comment`:
-        this.next()
-        return {
-          type: `BlankLine`,
-          comment: sym.text,
-        }
-
-      case `NL`:
-        return {
-          type: `BlankLine`,
-          comment: null,
-        }
-
-      case `label`:
-      case `opcode`:
-      case `directive`:
-        result = this.parseLabelledLine(sym)
-        break
-
-      case `symbol`:
-        const next = this.peek()
-        if (next.type === `opcode`) {
-          error(sym, `are you missing a ":" after "${sym.text}" and before "${next.text}"?`)
-        }
-
-        const { tokens, value } = this.parseAssignmentLine(sym)
-
-        result = {
-          type: `AssignmentLine`,
-          symbol: sym.text,
-          rhs: tokens,
-          value,
-        }
-        break
-
-      default:
-        error(sym, `A line should start with a label, an opcode, a directive, or a symbol.`)
+    if (this.lookingAtWS()) {
+      this.lexer.next()  
     }
 
-    if (sym = this.accept(`comment`)) {
-      result.comment = sym.text
+    let sym = this.next()
+    let result = {}
+
+    if (!sym || sym.type === `EOF`)
+      return null
+
+
+    try {
+      switch (sym.type) {
+        case `comment`:
+          this.next()
+          return {
+            type: `BlankLine`,
+            comment: sym.text,
+          }
+
+        case `NL`:
+          return {
+            type: `BlankLine`,
+            comment: null,
+          }
+
+        case `label`:
+        case `opcode`:
+        case `directive`:
+          result = this.parseLabelledLine(sym)
+          break
+
+        case `symbol`:
+          const next = this.peek()
+          if (next.type === `opcode` || next.type === `directive`) {
+            error(sym, `are you missing a ":" after "${sym.text}" and before "${next.text}"?`)
+          }
+
+          const { tokens, value } = this.parseAssignmentLine(sym)
+
+          result = {
+            type: `AssignmentLine`,
+            symbol: sym.text,
+            rhs: tokens,
+            value,
+          }
+          break
+
+        default:
+          error(sym, `A line should start with a label, an opcode, a directive, or a symbol.`)
+      }
+
+      if (sym = this.accept(`comment`)) {
+        result.comment = sym.text
+      }
+    
+      sym = this.next()
+      
+      if (sym && (sym.type !== `NL` && sym.type !== `EOF`)) {
+        error(sym, `extra stuff at end of line`)
+      }
+    }
+    catch (e) {
+      debugger
+      if (!(e instanceof ParseError))
+        throw e
+
+      this.swallowRestOfLine()
+
+      result = {
+        type: `ErrorLine`,
+        message: e.message,
+        line:    e.line,
+        col:     e.col,
+        symType: e.symType,
+        symText: e.symText,
+      }
     }
 
     const allTokens = this.lexer.tokensFromPosition(sol)
     result.lineText = allTokens.map(t => t.text).join(``)
- 
-    sym = this.next()
-    if (sym && (sym.type !== `NL` && sym.type !== `EOF`)) {
-      error(sym, `extra stuff at end of line`)
-    }
-
     return result
   }
 
@@ -241,7 +273,7 @@ export class Parser {
           error(op, `invalid binary operator`)
       }
     }
-    
+
     if (isNaN(value))
       return value
 
@@ -284,7 +316,7 @@ export class Parser {
         break
 
       case `bad_number`:
-        otherError(`If you want "${next.text}" to be a decimal number, precede it with "^d"`)
+        error(next, `If you want "${next.text}" to be a decimal number, precede it with "^d"`)
         break
 
       case `open_expr_grp`:
@@ -294,11 +326,13 @@ export class Parser {
 
       case `symbol`:
         const sym = this.lookupSymbol(next.text)
-        console.log("lookup", next.text, sym)
         if (sym && sym.isDefined())
           value = sym.value
         else {
           value = NaN
+          if (this.passNumber > 1) {
+            error(next, `pass ${this.passNumber} "${next.text}" is not defined`)
+          }
           this.context.addForwardReference(next.text, next.line)
         }
         break
@@ -313,12 +347,12 @@ export class Parser {
         const c1 = next.text.charCodeAt(1)
         const c2 = next.text.charCodeAt(1)
         if (c1 > 127 || c2 > 127)
-          error(next, `Sorry, only 8 bit characters are allowed`)
+          error(next, `Sorry, only 7 bit characters are allowed`)
         value = c2 << 8 | c1
         break
 
       default:
-        error(next, `invalid start of an expression`)
+        error(next, `invalid start of expression`)
         break
 
     }
@@ -451,15 +485,12 @@ export class Parser {
   parseBranch(_operator) {
     const target = this.next()
     let offset = this.parseExpression(target)
-    console.log("original poffset", offset)
     if (isNaN(offset)) { // forward reference: replace with . for now
       offset = this.context.clc + 2 
-      console.log("forward reference to ", target)
     }
 
     offset -= (this.context.clc + 2)
     offset /= 2
-    console.log("final offset = ", offset)
     if (offset < -128 || offset > 127)
       error(target, `is too far away from this instruction (its offset is ${offset} words, ` +
         `and we're limited to an offset between -128 and +127 words`)
@@ -711,7 +742,7 @@ export class Parser {
   }
 
   parseAssignmentLine(sym) {
-    this.expect(`equals`)
+    this.expect(`equals`, `(perhaps "${sym.text}" needs a colon at the end?)`)
     const { tokens, value } = this.collectTokens(_ => this.parseExpression(this.next()))
     this.context.addAssigned(sym.text, value)
     return { tokens, value }

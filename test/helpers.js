@@ -1,8 +1,9 @@
-import { SourceCode, Parser, MachineState, Emulator } from "../src/main"
+import { Parser, MachineState, Emulator } from "../src/main"
+export { octal } from "../src/helpers"
 
 export function assembleAndRun(src) {
-  const assembled = new SourceCode(src)
-  const parser = new Parser(assembled)
+  const parser = new Parser(src)
+  const assembled = parser.assemble()
 
   const state     = new MachineState()
   state.loadAssembledCode(assembled)

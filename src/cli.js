@@ -1,8 +1,6 @@
 import { assemble } from "./main"
+import { octal } from "./helpers"
 
-function octal(n) {
-  return n.toString(8).padStart(6, `0`)
-}
 
 function dumpMemory(memory) {
   let nextLoc = memory[0][0]
@@ -42,6 +40,8 @@ process.stdin.on(`end`, () => {
 
   const assembled = assemble(source)
   console.dir(assembled)
-  dumpMemory(assembled.toMemory())
-  console.log(`Entry point: ${octal(assembled.start_address)}`)
+  if (assembled.errorCount === 0) {
+    dumpMemory(assembled.toMemory())
+    console.log(`Entry point: ${octal(assembled.start_address)}`)
+  }
 })

@@ -9,6 +9,18 @@ class SourceLine {
 class BlankLine extends SourceLine {
 }
 
+class ErrorLine extends SourceLine {
+  constructor(info) {
+    super(info)
+    this.message = info.message
+    this.lineText = info.lineText
+    this.line = info.line
+    this.col = info.col
+    this.symType = info.symType
+    this.symText = info.symText
+  }
+}
+
 class AssignmentLine extends SourceLine {
   constructor(info) {
     super(info)
@@ -44,6 +56,8 @@ export class SourceCode {
   reset() {
     this.sourceLines = []
     this.start_address = 0o1000
+    this.unresolvedNames = {}
+    this.errorCount = 0
   }
 
   createAndAddLine(info) {
@@ -67,11 +81,21 @@ export class SourceCode {
         line = new JustLabelsLine(info)
         break
 
+      case `ErrorLine`:
+        line = new ErrorLine(info)
+        this.errorCount++
+        break
+
       default:
         throw new Error(`unhandled line type ${info.type}`)
     }
 
     this.sourceLines.push(line)
+  }
+
+  recordUnresolvedNames(namesAndLines) {
+    this.unresolvedNames = namesAndLines
+    this.errorCount += Object.keys(namesAndLines).length
   }
 
   toMemory() { // return list of [ address, [ bytes ]]

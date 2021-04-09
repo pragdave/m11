@@ -13,11 +13,11 @@ export class Lexer {
       comment:         /;.*?$/,
       label:           new RegExp(symbol + `:`),
       ones_complement: `^c`,
+      bad_number:      /[0-7]*[89][0-9]*/,
       octal_number:    /[0-7]+|\^o[0-7]+/,
       binary_number:   /\^b[01]+/,
       decimal_number:  /\^d[0-9]+/,
       float_number:    /\^f[0-9]\.[0-9]/,
-      bad_number:      /[0-7][89][0-9]*/,
       equals:          `=`,
       comma:           `,`,
       single_char:     /'./,
@@ -109,8 +109,8 @@ export class Lexer {
   }
 
   tokensFromPosition(pos) {
-    if (pos < this.tokens.length && this.tokens[pos].type === `WS`)
-      pos++
+    // if (pos < this.tokens.length && this.tokens[pos].type === `WS`)
+    //   pos++
 
     return this.tokens.slice(pos, this.offset)
   }

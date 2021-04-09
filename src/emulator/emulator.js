@@ -4,7 +4,6 @@ import { octal, saddw } from "../helpers"
 const SP = 6, PC = 7
 
 const BIT15 = 0o100000
-const BIT14 = 0o040000
 const WORD_MASK = 0o177777
 
 const BIT7 = 0o000200
@@ -17,7 +16,7 @@ function additiveOverflow(src, dst, result) {
           ((dst & BIT15) !== (result & BIT15)) // dst same as result
 }
 
-function subtractiveOverflow(minuend, subtrahend, result, msb = BIT7) {
+function subtractiveOverflow(minuend, subtrahend, result, msb = BIT15) {
   return ((minuend & msb) ^ (subtrahend & msb)) &&   // different sign
           ((subtrahend & msb) === (result & msb)) // subtrahend same as result
 }
@@ -25,9 +24,22 @@ function subtractiveOverflow(minuend, subtrahend, result, msb = BIT7) {
 
 export class Emulator {
 
-  constructor(machine_state) {
-    this.registers = machine_state.registers
-    this.memory    = machine_state.memory
+  constructor(machineState) {
+    this.machineState = machineState
+    this.registers = machineState.registers
+    this.memory    = machineState.memory
+  }
+
+  registerForEvents(cb) {
+    this.eventHandlers.push(cb)
+  }
+
+  enableEvents() {
+    this.machineState.reportEvents(this.eventHandlers)
+  }
+
+  disableEvents() {
+    this.machineState.reportEvents(false)
   }
 
   step() {
@@ -417,7 +429,6 @@ export class Emulator {
     psw.V = subtractiveOverflow(dst, src, result)
     psw.C = (result & ~WORD_MASK)
     this.storeViaDD(inst, result, 2, op2)
-    console.log(octal(src), octal(dst), octal(result))
   }
 
   mul(inst, op1, rno, reg)     { 
@@ -846,24 +857,73 @@ export class Emulator {
 
   mfps(inst, op1) { console.error(`missing mpfs`) }
 
-  br(_inst, newPC)   {
-    this.registers[PC] = newPC
+  brIF(bool, newPC) {
+    if (bool)
+      this.registers[PC] = newPC
   }
 
-  bne(inst)  { console.error(`missing bne`) }
-  beq(inst)  { console.error(`missing beq`) }
-  bge(inst)  { console.error(`missing bge`) }
-  blt(inst)  { console.error(`missing blt`) }
-  bgt(inst)  { console.error(`missing bgt`) }
-  ble(inst)  { console.error(`missing ble`) }
-  bpl(inst)  { console.error(`missing bpl`) }
-  bmi(inst)  { console.error(`missing bmi`) }
-  bhi(inst)  { console.error(`missing bhi`) }
-  blos(inst) { console.error(`missing blos`) }
-  bvc(inst)  { console.error(`missing bvc`) }
-  bvs(inst)  { console.error(`missing bvs`) }
-  bcc(inst)  { console.error(`missing bcc`) }
-  bcs(inst)  { console.error(`missing bcs`) }
+  br(_inst, newPC)   {
+    this.brIF(true, newPC)
+  }
+
+  bne(_inst, newPC)  { 
+    this.brIF(!this.memory.psw.Z, newPC)
+  }
+  
+  beq(_inst, newPC)  { 
+    this.brIF(this.memory.psw.Z, newPC)
+  }
+  
+  bpl(_inst, newPC)  { 
+    this.brIF(!this.memory.psw.N, newPC)
+  }
+  
+  bmi(_inst, newPC)  { 
+    this.brIF(this.memory.psw.N, newPC)
+  }
+
+  bvc(_inst, newPC)  { 
+    this.brIF(!this.memory.psw.V, newPC)
+  }
+  
+  bvs(_inst, newPC)  { 
+    this.brIF(this.memory.psw.V, newPC)
+  }
+  
+  bcc(_inst, newPC)  { 
+    this.brIF(!this.memory.psw.C, newPC)
+  }
+  
+  bcs(_inst, newPC)  { 
+    this.brIF(this.memory.psw.C, newPC)
+  }
+
+  bge(_inst, newPC)  { 
+    this.brIF(!(this.memory.psw.N ^ this.memory.psw.V), newPC)
+  }
+  
+  blt(_inst, newPC)  { 
+    this.brIF(this.memory.psw.N ^ this.memory.psw.V, newPC)
+  }
+  
+  bgt(_inst, newPC)  { 
+    this.brIF(!(this.memory.psw.Z || (this.memory.psw.N ^ this.memory.psw.V)), newPC)
+  }
+  
+  ble(_inst, newPC)  { 
+    this.brIF(this.memory.psw.Z || (this.memory.psw.N ^ this.memory.psw.V), newPC)
+  }
+  
+  
+  bhi(_inst, newPC)  { 
+    this.brIF(!(this.memory.psw.C || this.memory.psw.Z), newPC)
+  }
+  
+  blos(_inst, newPC) { 
+    this.brIF(this.memory.psw.C || this.memory.psw.Z, newPC)
+  }
+  
+  
   
 
   jsr(inst, op1)   { console.error(`missing jsr`) }
