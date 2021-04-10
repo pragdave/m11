@@ -30,6 +30,11 @@ export class Emulator {
     this.memory    = machineState.memory
   }
 
+  trap(reason) { // extension point...
+    throw new Error(reason)
+  }
+
+
   registerForEvents(cb) {
     this.eventHandlers.push(cb)
   }
@@ -141,7 +146,7 @@ export class Emulator {
 
 
 
-  fetchViaDD(dd, bytes, possibleOperand) {
+  fetchViaDD(dd, bytes, possibleOperand, forJump = false) {
     dd &= 0o77
     const mode = dd >> 3
     const rno  = dd & 7
@@ -152,53 +157,59 @@ export class Emulator {
 
     switch (mode) {
       case 0:   // Rn
+        if (forJump)
+          this.trap(`attempt to jmp/jsr to a register ${rno}`)
         result = reg
         break
 
       case 1:   // (Rn)
-        result = this.memory.getByteOrWord(reg, bytes)
+        if (forJump)
+          result = reg
+        else
+          result = this.memory.getByteOrWord(reg, bytes)
         break
 
       case 2:   // (Rn)+
         if (rno === 7)
           result = possibleOperand
         else {
-          result = this.memory.getByteOrWord(reg, bytes)
+          if (forJump)
+            result = reg
+          else
+            result = this.memory.getByteOrWord(reg, bytes)
           this.registers[rno] = reg + bytes
         }
         break
 
-      case 3:   // @(Rn)++
+      case 3:   // @(Rn)+
         if (rno === 7)
           addr = possibleOperand
         else {
           addr = this.memory.getWord(reg)
           this.registers[rno] += 2
         }
-        result = this.memory.getByteOrWord(addr, bytes)
+        result = forJump ? addr : this.memory.getByteOrWord(addr, bytes)
         break
 
       case 4:  // -(Rn)
         reg -= bytes
-        result = this.memory.getByteOrWord(reg, bytes)
+        result = forJump ? reg : this.memory.getByteOrWord(reg, bytes)
         this.registers[rno] = reg
         break
 
       case 5:  // @-(Rn)
         reg -= 2
         addr = this.memory.getWord(reg)
-        result = this.memory.getByteOrWord(addr, bytes)
+        result = forJump ? addr : this.memory.getByteOrWord(addr, bytes)
         this.registers[rno] = reg
         break
 
       case 6:
         offset = possibleOperand
         reg = this.registers[rno]
-        addr = saddw(offset, reg)
-        if (rno === 7)
-          result = addr
-        else
-          result = this.memory.getByteOrWord(addr, bytes)
+        result = saddw(offset, reg)
+        if (!forJump)
+          result = this.memory.getByteOrWord(result, bytes)
         break
 
       case 7: // @X(Rn)
@@ -206,7 +217,7 @@ export class Emulator {
         reg = this.registers[rno]
         addr = saddw(offset,  reg)
         addr = this.memory.getWord(addr)
-        result = this.memory.getByteOrWord(addr, bytes)
+        result = forJump ? addr : this.memory.getByteOrWord(addr, bytes)
         break
     }
     return result & Mask[bytes]
@@ -516,7 +527,10 @@ export class Emulator {
 
   sob(inst, op1)     { console.error(`missing sob`) }
 
-  jmp(inst, op1)     { console.error(`missing JMP`) }
+  jmp(inst, op1) {
+    const target = this.fetchViaDD(inst, 2, op1, /*forJump = */true)
+    this.registers[PC] = target
+  }
 
   swab(inst, op1)     { 
     let psw = this.memory.psw
@@ -931,8 +945,7 @@ export class Emulator {
   
 
   jsr(inst, op1, rno, reg)     { 
-    debugger
-    let target = this.fetchViaDD(inst, 2, op1)
+    let target = this.fetchViaDD(inst, 2, op1, /*forJump=*/ true)
     this.registers[SP] -= 2
     this.memory.setByteOrWord(this.registers[SP], reg, 2)
 
