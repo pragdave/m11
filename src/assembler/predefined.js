@@ -98,7 +98,7 @@ export const Operators = {
   // 15						9	8		6	5		3	2		0
   // Opcode	Reg	Src	Register
 
-  jsr:  { op: 0o004000, fmt: `Jsr`,   desc: `Jump to subroutine: -(SP) ← Reg; Reg ← PC; PC ← Src` },
+  jsr:  { op: 0o004000, fmt: `TwoOp3`, desc: `Jump to subroutine: -(SP) ← Reg; Reg ← PC; PC ← Src` },
 
   // 15												3	2		0
   // Opcode	Reg

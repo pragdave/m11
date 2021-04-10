@@ -4,6 +4,9 @@ export { octal } from "../src/helpers"
 export function assembleAndRun(src) {
   const parser = new Parser(src)
   const assembled = parser.assemble()
+  if (assembled.errorCount > 0) {
+    throw new Error(`Test abandonned: error in assembly compilation`)
+  }
 
   const state     = new MachineState()
   state.loadAssembledCode(assembled)

@@ -62,6 +62,10 @@ export class Emulator {
       if (opcode || desc.mask === 0o177777) {
         const handler = desc.opcodes[opcode]
         if (handler) {
+          // TODO: remove next 3 after all tests finished
+          if (!decoder || !(decoder in this)) {
+            throw new Error(`can't decode ${desc.decode}`) 
+          }
           return this[decoder](handler, instruction)
         }
       }
@@ -86,7 +90,6 @@ export class Emulator {
   decode_single(handler, instruction) {
     let op = this.fetchNextWordIfNeeded(instruction) 
     this[handler](instruction, op)
-    return handler // just until all opcodes implemented
   }
 
   decode_one_and_a_half(handler, instruction) {
@@ -94,14 +97,12 @@ export class Emulator {
     const rno = (instruction >> 6) & 7
     let reg = this.registers[rno]
     this[handler](instruction, op, rno, reg)
-    return handler // just until all opcodes implemented
   }
 
   decode_double(handler, instruction) {
     const op1 = this.fetchNextWordIfNeeded(instruction >> 6)
     const op2 = this.fetchNextWordIfNeeded(instruction)
     this[handler](instruction, op1, op2)
-    return handler // just until all opcodes implemented
   }
 
   decode_branch(handler, instruction) {
@@ -115,13 +116,13 @@ export class Emulator {
   }
 
   decode_jsr(handler, instruction) {
-    throw `missing`
-    return handler // just until all opcodes implemented
+    this.decode_one_and_a_half(handler, instruction)
   }
 
   decode_rts(handler, instruction) {
-    this[handler](instruction)
-    return handler // just until all opcodes implemented
+    const rno = instruction  & 7
+    let reg = this.registers[rno]
+    this[handler](instruction, rno, reg)
   }
 
   decode_trap(handler, instruction) {
@@ -926,9 +927,23 @@ export class Emulator {
   
   
 
-  jsr(inst, op1)   { console.error(`missing jsr`) }
+  jsr(inst, op1, rno, reg)     { 
+    debugger
+    let target = this.fetchViaDD(inst, 2, op1)
+    this.registers[SP] -= 2
+    this.memory.setByteOrWord(this.registers[SP], reg, 2)
 
-  rts(inst)   { console.error(`missing rts`) }
+    if (rno !== PC)
+      this.registers[rno] = this.registers[PC]
+    this.registers[PC]  = target
+  }
+
+  rts(_instruction, rno, reg) {
+    if (rno !== PC)
+      this.registers[PC] = reg
+    this.registers[rno] = this.memory.getByteOrWord(this.registers[SP], 2)
+    this.registers[SP] += 2
+  }
 
   emt(inst)     { console.error(`missing emt`) }
   trap(inst)     { console.error(`missing trap`) }
