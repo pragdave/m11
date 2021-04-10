@@ -195,7 +195,10 @@ export class Emulator {
         offset = possibleOperand
         reg = this.registers[rno]
         addr = saddw(offset, reg)
-        result = this.memory.getByteOrWord(addr, bytes)
+        if (rno === 7)
+          result = addr
+        else
+          result = this.memory.getByteOrWord(addr, bytes)
         break
 
       case 7: // @X(Rn)
