@@ -505,13 +505,16 @@ export class Parser {
     this.expect(`comma`)
     const target = this.next()
     let offset = this.parseExpression(target)
-    offset -= (this.context.clc + 2)
-    offset /= 2
-    if (offset < -128 || offset > 127)
+    if (offset >= this.context.clc)
+      error(target, 
+        `the target of a SOB instruction must be at a lower address than the instruction itself`)
+
+    offset = ((this.context.clc + 2) - offset) / 2
+    if (offset > 0o77)
       error(target, `is too far away from this instruction (its offset is ${offset} words, ` +
-        `and we're limited to an offset between -128 and +127 words`)
+        `and we're limited to an offset 63 words`)
     return {
-      opEncoding: Registers[reg.text] << 8 | offset & 0xff,
+      opEncoding: Registers[reg.text] << 6 | offset & 0x3f,
       extraWords: [],
     }
   }

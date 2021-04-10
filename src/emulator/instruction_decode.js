@@ -21,6 +21,15 @@ export const decodeTable =  [
   {
     shift: 9,
     mask: 0o177000,
+    decode: `decode_sob`,
+    opcodes: {
+      0o077000: `sob`,
+    },
+  },
+
+  {
+    shift: 9,
+    mask: 0o177000,
     decode: `decode_one_and_a_half`,
     opcodes: {
       0o070000: `mul`,
@@ -28,7 +37,6 @@ export const decodeTable =  [
       0o072000: `ash`,
       0o073000: `ashc`,
       0o074000: `xor`,
-      0o077000: `sob`,
     },
   },
 

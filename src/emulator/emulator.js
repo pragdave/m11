@@ -124,6 +124,13 @@ export class Emulator {
     this.decode_one_and_a_half(handler, instruction)
   }
 
+  decode_sob(handler, instruction) {
+    const offset = instruction  & 0o77
+    const rno = (instruction >> 6) & 7
+    let reg = this.registers[rno]
+    this[handler](instruction, rno, reg, offset)
+  }
+
   decode_rts(handler, instruction) {
     const rno = instruction  & 7
     let reg = this.registers[rno]
@@ -525,7 +532,13 @@ export class Emulator {
   }
 
 
-  sob(inst, op1)     { console.error(`missing sob`) }
+  sob(_inst, rno, reg, offset) { 
+    reg -= 1 
+    this.registers[rno] = reg & 0xffff
+    if (reg !== 0) {
+      this.registers[PC] -= 2 * offset
+    }
+  }
 
   jmp(inst, op1) {
     const target = this.fetchViaDD(inst, 2, op1, /*forJump = */true)
