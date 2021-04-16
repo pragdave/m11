@@ -76,9 +76,12 @@ export class Lexer {
     if (token)
       return token
 
-    return {
-      type: `EOF`,
+    if (this.offset > 0) {
+      const prev = this.tokens[Math.min(this.tokens.length, this.offset) - 1]
+      return { type: `EOF`, line: prev.line, col: prev.col }
     }
+
+    return { type: `EOF`, line: 1, col: 0 }
   }
 
   peekNotWS() {

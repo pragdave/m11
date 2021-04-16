@@ -1,5 +1,8 @@
 import { decodeTable } from "./instruction_decode"
 import { octal, saddw } from "../helpers"
+import { EventRecorder } from "./event_recorder"
+import { internallyHandledEMT } from "./extensions"
+
 
 const SP = 6, PC = 7
 
@@ -26,14 +29,15 @@ export class Emulator {
 
   constructor(machineState) {
     this.machineState = machineState
-    this.registers = machineState.registers
-    this.memory    = machineState.memory
+    this.registers    = machineState.registers
+    this.memory       = machineState.memory
+    this.events       = new EventRecorder()
+    this.machineState.recordEventsTo(this.events)
   }
 
   trap(reason) { // extension point...
     throw new Error(reason)
   }
-
 
   registerForEvents(cb) {
     this.eventHandlers.push(cb)
@@ -49,7 +53,6 @@ export class Emulator {
 
   step() {
     const instruction = this.fetchAtPC()
-    // console.log(`decode ${instruction.toString(8)}, PC = ${this.registers[PC].toString(8)}`)
     this.decode(instruction)
   }
 
@@ -76,7 +79,7 @@ export class Emulator {
       }
     }
 
-    throw new Error(`Invalid instruction "0o${instruction.toString(8).padStart(6, `0`)}"`)
+    throw new Error(`Invalid instruction: "${octal(instruction)}"`)
   }
 
 
@@ -138,7 +141,8 @@ export class Emulator {
   }
 
   decode_trap(handler, instruction) {
-    return handler // just until all opcodes implemented
+    const func = instruction & 0xff
+    this[handler](instruction, func)
   }
 
   decode_cc(handler, instruction) {
@@ -974,7 +978,21 @@ export class Emulator {
     this.registers[SP] += 2
   }
 
-  emt(inst)     { console.error(`missing emt`) }
+  emt(inst, func) { 
+    if (!internallyHandledEMT(func, this.machineState)) {
+      const sp = this.registers[SP] - 4
+      this.memory.setByteOrWord(sp, this.registers[PC])
+      this.memory.setByteOrWord(sp + 2, this.memory.psw.toWord())
+      this.registers[SP] = sp
+      this.registers[PC] = this.memory.getWord(0o30)
+      this.memory.psw.fromWord(this.memory.getWord(0x32))
+
+      if (this.registers[PC] === 0) {
+        throw new Error(`EMT issued, but there's no vector in locations 30/32`)
+      }
+    }
+  }
+
   trap(inst)     { console.error(`missing trap`) }
 
 

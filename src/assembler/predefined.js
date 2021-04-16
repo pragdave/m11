@@ -149,6 +149,8 @@ export const Directives = [
   `.end`,
   `.even`,
   `.odd`,
+  `.print`,
+  `.ttyout`,
   `.word`,
 ]
 

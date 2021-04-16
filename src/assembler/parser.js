@@ -1,6 +1,6 @@
 // impor { octal } from "../helpers"
 import { Lexer } from "./lexer.js"
-import { MemData, MemFillData } from "./memory"
+import { MemInstruction, MemData, MemFillData } from "./memory"
 import { Operators, Registers } from "./predefined.js"
 import { ParseContext } from "./parse_context"
 import { SourceCode } from "../shared_state/source_code" 
@@ -221,7 +221,6 @@ export class Parser {
       }
     }
     catch (e) {
-      debugger
       if (!(e instanceof ParseError))
         throw e
 
@@ -352,7 +351,10 @@ export class Parser {
         break
 
       default:
-        error(next, `invalid start of expression`)
+        if (next.type === `EOF` || next.type === `NL` || next.type === `comment`)
+          error(next, `missing expression`)
+        else
+          error(next, `invalid start of expression`)
         break
 
     }
@@ -614,6 +616,12 @@ export class Parser {
   }
 
 
+  generateEMT(func) {
+    const instruction = 0o104 | func
+    this.context.storeWordInMemory(instruction, MemInstruction)
+    return [ func, 0o210 ]
+  }
+
   parseDirectiveLine(sym) {
     let value
     let count
@@ -719,6 +727,14 @@ export class Parser {
         }
         break
 
+      case `.print`:
+        generatedBytes = generatedBytes.concat(this.generateEMT(0o351))
+        break
+
+      case `.ttyout`:
+        generatedBytes = generatedBytes.concat(this.generateEMT(0o341))
+        break
+
       case  `.word`:
         value = this.parseExpression(this.next())
         this.context.storeWordInMemory(value, MemData)
@@ -745,7 +761,7 @@ export class Parser {
   }
 
   parseAssignmentLine(sym) {
-    this.expect(`equals`, `(perhaps "${sym.text}" needs a colon at the end?)`)
+    this.expect(`equals`, `(if "${sym.text}" is a label, is it missing a colon at the end?)`)
     const { tokens, value } = this.collectTokens(_ => this.parseExpression(this.next()))
     this.context.addAssigned(sym.text, value)
     return { tokens, value }
