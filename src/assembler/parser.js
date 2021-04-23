@@ -688,9 +688,20 @@ export class Parser {
             error(sym, `the count should be positive`)
         }
         if (sym.text === `.blkw`)
-          count *= 2
+          count *= 2 
 
-        this.context.clc += count
+        // we could just do:
+        //
+        //    this.context.clc += count
+        //
+        // but I want to animate storing values, so for now
+        // I'll store zeroes
+      
+        for (let i = 0; i < count; i++) {
+          this.context.storeByteInMemory(55, MemData)
+          generatedBytes.push(0)
+        }
+
         break
 
       case  `.byte`:

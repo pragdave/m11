@@ -1,16 +1,14 @@
-import * as EV from "../emulator/event_recorder"
-
 export class Registers {
 
   constructor() {
-    this.registers = [ 0, 0, 0, 0, 0, 0, 0, 0 ]
+    this.clear()
   }
 
   get [0]()       { return this.rget(0) }
   set [0](val)    { this.rset(0, val)   }
 
   get [1]()       { return this.rget(1) }
-  set [1](val)    { this.rset(0, val)   }
+  set [1](val)    { this.rset(1, val)   }
 
   get [2]()       { return this.rget(2) }
   set [2](val)    { this.rset(2, val)   }
@@ -38,24 +36,22 @@ export class Registers {
 
   rget(rno) {
     const value = this.registers[rno]
-    this.record(EV.REG_READ, { rno, value })
+    this.auditor?.register_read(rno, value)
     return value
   }
 
   rset(rno, value) {
     if (value & ~0xffff) 
       throw new Error(`Attempt to set R${rno} to a value wider than 16 bits (${value})`)
-    this.record(EV.REG_WRITE, { rno, value })
+    this.auditor?.register_write(rno, value)
     this.registers[rno] = value
   }
 
-  recordEventsTo(recorder) {
-    this.recorder = recorder
+  clear() {
+    this.registers = [ 0, 0, 0, 0, 0, 0, 0, 0 ]
   }
 
-  record(type, args) {
-    if (this.recorder)
-      this.recorder.record(type, args)
+  setAuditor(auditor) {
+    this.auditor = auditor
   }
 }
-

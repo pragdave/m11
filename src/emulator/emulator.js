@@ -1,27 +1,27 @@
 import { decodeTable } from "./instruction_decode"
 import { octal, saddw } from "../helpers"
-import { EventRecorder } from "./event_recorder"
+import { Auditor } from "./auditor"
 import { internallyHandledEMT } from "./extensions"
-
+import { PS } from "./machine_state"
 
 const SP = 6, PC = 7
 
-const BIT15 = 0o100000
+const BIT15     = 0o100000
 const WORD_MASK = 0o177777
 
-const BIT7 = 0o000200
+const BIT7      = 0o000200
 const BYTE_MASK = 0o000377
 
 const Mask = [ 0, BYTE_MASK, WORD_MASK ]  // indexed by byte count
 
 function additiveOverflow(src, dst, result) {
   return ((src & BIT15) === (dst & BIT15)) &&   // different sign
-          ((dst & BIT15) !== (result & BIT15)) // dst same as result
+    ((dst & BIT15) !== (result & BIT15)) // dst same as result
 }
 
 function subtractiveOverflow(minuend, subtrahend, result, msb = BIT15) {
   return ((minuend & msb) ^ (subtrahend & msb)) &&   // different sign
-          ((subtrahend & msb) === (result & msb)) // subtrahend same as result
+    ((subtrahend & msb) === (result & msb)) // subtrahend same as result
 }
 
 
@@ -31,29 +31,53 @@ export class Emulator {
     this.machineState = machineState
     this.registers    = machineState.registers
     this.memory       = machineState.memory
-    this.events       = new EventRecorder()
-    this.machineState.recordEventsTo(this.events)
+    this.auditor      = new Auditor(this.memory, this.registers, this.machineState.psw)
   }
 
   trap(reason) { // extension point...
     throw new Error(reason)
   }
 
-  registerForEvents(cb) {
-    this.eventHandlers.push(cb)
-  }
 
-  enableEvents() {
-    this.machineState.reportEvents(this.eventHandlers)
-  }
+  getEmulationState(callback = null) {
+    let additionalStatus
 
-  disableEvents() {
-    this.machineState.reportEvents(false)
+    this.auditor.enable()
+
+    if (callback) {
+      try {
+        callback()
+      }
+      catch (e)  {
+        additionalStatus = {
+          message: e.message,
+          pc:      this.priorPC,
+        }
+      }
+    }
+
+    return this.auditor.reportAndDisable(additionalStatus, this.machineState.processorState)
   }
 
   step() {
-    const instruction = this.fetchAtPC()
-    this.decode(instruction)
+    this.machineState.processorState = PS.Running
+
+    return this.getEmulationState(() => {
+      this.priorPC = this.registers[PC]
+      this.decodeAndRun(this.fetchAtPC())
+
+      switch (this.machineState.processorState) {
+        case PS.Paused:
+          console.error(`Ignoring unlikely paused state`)
+          break
+        case PS.Running:
+          this.machineState.processorState = PS.Paused
+          break
+        default:
+          // let playgraound handle it
+          break
+      }
+    })
   }
 
   fetchAtPC() {
@@ -63,7 +87,7 @@ export class Emulator {
     return word
   }
 
-  decode(instruction) {
+  decodeAndRun(instruction) {
     for (let desc of decodeTable) {
       const decoder = desc.decode
       const opcode = instruction & desc.mask
@@ -258,7 +282,7 @@ export class Emulator {
 
       case 2:   // (Rn)+
         if (rno === 7)
-          throw new Error(`Attempted to store value (${octal(value)}) into immediate value`)
+          throw new Error(`Attempted to store value (${octal(value)}) into immediate operand`)
 
         this.memory.setByteOrWord(reg, value, bytes)
         if (rno !== 7)
@@ -312,13 +336,13 @@ export class Emulator {
   //
   ////////////////////////////////////////////////////////////////////////////////
 
-  mov(inst, op1, op2)     { 
-    const value = this.fetchViaDD(inst >> 6, 2, op1)
-    this.storeViaDD(inst, value, 2, op2)
-    this.memory.psw.Z = value === 0
-    this.memory.psw.N = value & BIT15
-    this.memory.psw.V = false
-  }
+    mov(inst, op1, op2)     { 
+      const value = this.fetchViaDD(inst >> 6, 2, op1)
+      this.storeViaDD(inst, value, 2, op2)
+      this.memory.psw.Z = value === 0
+      this.memory.psw.N = value & BIT15
+      this.memory.psw.V = false
+    }
 
   movb(inst, op1, op2)    { 
     let value = this.fetchViaDD(inst >> 6, 1, op1)
@@ -349,7 +373,7 @@ export class Emulator {
     this.memory.psw.V = subtractiveOverflow(src, dst, result)
     this.memory.psw.C = result & ~WORD_MASK
   }
-  
+
   cmpb(inst, op1, op2)     { 
     const psw = this.memory.psw
     const src = this.fetchViaDD((inst >> 6) & 0o77, 1, op1)
@@ -360,7 +384,7 @@ export class Emulator {
     this.memory.psw.V = subtractiveOverflow(src, dst, result, BIT7)
     this.memory.psw.C = result & ~BYTE_MASK
   }
-  
+
   bit(inst, op1, op2)     { 
     const psw = this.memory.psw
     const src = this.fetchViaDD((inst >> 6) & 0o77, 2, op1)
@@ -509,7 +533,7 @@ export class Emulator {
       if (Math.abs(quotient > 32767)) {
         psw.V = true
       }
-      
+
       this.registers[rno] = quotient & 0xffff
       this.registers[rno + 1] = remainder
 
@@ -532,7 +556,7 @@ export class Emulator {
     psw.Z = result === 0
     psw.V = false
     // psw.C unchanged
-    
+
   }
 
 
@@ -788,7 +812,7 @@ export class Emulator {
 
     this.storeViaDD(inst, value, 2, op1)
   }
-  
+
   rolb(inst, op1)     { 
     const psw = this.memory.psw
 
@@ -904,15 +928,15 @@ export class Emulator {
   bne(_inst, newPC)  { 
     this.brIF(!this.memory.psw.Z, newPC)
   }
-  
+
   beq(_inst, newPC)  { 
     this.brIF(this.memory.psw.Z, newPC)
   }
-  
+
   bpl(_inst, newPC)  { 
     this.brIF(!this.memory.psw.N, newPC)
   }
-  
+
   bmi(_inst, newPC)  { 
     this.brIF(this.memory.psw.N, newPC)
   }
@@ -920,15 +944,15 @@ export class Emulator {
   bvc(_inst, newPC)  { 
     this.brIF(!this.memory.psw.V, newPC)
   }
-  
+
   bvs(_inst, newPC)  { 
     this.brIF(this.memory.psw.V, newPC)
   }
-  
+
   bcc(_inst, newPC)  { 
     this.brIF(!this.memory.psw.C, newPC)
   }
-  
+
   bcs(_inst, newPC)  { 
     this.brIF(this.memory.psw.C, newPC)
   }
@@ -936,30 +960,30 @@ export class Emulator {
   bge(_inst, newPC)  { 
     this.brIF(!(this.memory.psw.N ^ this.memory.psw.V), newPC)
   }
-  
+
   blt(_inst, newPC)  { 
     this.brIF(this.memory.psw.N ^ this.memory.psw.V, newPC)
   }
-  
+
   bgt(_inst, newPC)  { 
     this.brIF(!(this.memory.psw.Z || (this.memory.psw.N ^ this.memory.psw.V)), newPC)
   }
-  
+
   ble(_inst, newPC)  { 
     this.brIF(this.memory.psw.Z || (this.memory.psw.N ^ this.memory.psw.V), newPC)
   }
-  
-  
+
+
   bhi(_inst, newPC)  { 
     this.brIF(!(this.memory.psw.C || this.memory.psw.Z), newPC)
   }
-  
+
   blos(_inst, newPC) { 
     this.brIF(this.memory.psw.C || this.memory.psw.Z, newPC)
   }
-  
-  
-  
+
+
+
 
   jsr(inst, op1, rno, reg)     { 
     let target = this.fetchViaDD(inst, 2, op1, /*forJump=*/ true)
@@ -978,22 +1002,29 @@ export class Emulator {
     this.registers[SP] += 2
   }
 
-  emt(inst, func) { 
-    if (!internallyHandledEMT(func, this.machineState)) {
-      const sp = this.registers[SP] - 4
-      this.memory.setByteOrWord(sp, this.registers[PC])
-      this.memory.setByteOrWord(sp + 2, this.memory.psw.toWord())
-      this.registers[SP] = sp
-      this.registers[PC] = this.memory.getWord(0o30)
-      this.memory.psw.fromWord(this.memory.getWord(0x32))
+  dispatchVia(address, opcodeName) {
+    const sp = this.registers[SP] - 4
+    this.memory.setByteOrWord(sp, this.registers[PC])
+    this.memory.setByteOrWord(sp + 2, this.memory.psw.toWord())
+    this.registers[SP] = sp
+    this.registers[PC] = this.memory.getWord(address)
+    this.memory.psw.fromWord(this.memory.getWord(address + 2))
 
-      if (this.registers[PC] === 0) {
-        throw new Error(`EMT issued, but there's no vector in locations 30/32`)
-      }
+    if (this.registers[PC] === 0) {
+      throw new Error(`${opcodeName} issued, but there's no vector in ` +
+          `locations ${octal(address)}-${octal(address + 2)}`)
     }
   }
 
-  trap(inst)     { console.error(`missing trap`) }
+  emt(_inst, func) { 
+    if (!internallyHandledEMT(func, this.machineState)) {
+      this.dispatchVia(0o30, `EMT`)
+    }
+  }
+
+  trap(_inst)     { 
+    this.dispatchVia(0o34, `TRAP`)
+  }
 
 
   ccc(inst)     { 
@@ -1016,7 +1047,11 @@ export class Emulator {
   bpt(inst)     { console.error(`missing bpt`) }
   iot(inst)     { console.error(`missing iot`) }
   rtt(inst)     { console.error(`missing rtt`) }
-  halt(inst)    { console.error(`missing halt`) }
+
+  halt(_inst)   { 
+    this.machineState.processorState = PS.Halted
+  }
+
   wait(inst)    { console.error(`missing wait`) }
   reset(inst)   { console.error(`missing reset`) }
 
