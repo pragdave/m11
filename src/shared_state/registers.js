@@ -34,6 +34,7 @@ export class Registers {
   get [`pc`]()    { return this.rget(7) }
   set [`pc`](val) { this.rset(7, val)   }
 
+
   rget(rno) {
     const value = this.registers[rno]
     this.auditor?.register_read(rno, value)

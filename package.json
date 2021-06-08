@@ -9,14 +9,14 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
- 
   "jest": {
-    "setupFilesAfterEnv": ["jest-expect-message"]
-  } ,
+    "setupFilesAfterEnv": [
+      "jest-expect-message"
+    ]
+  },
   "dependencies": {
     "moo": "^0.5.1"
   },
-
   "devDependencies": {
     "@babel/core": "^7.13.10",
     "@babel/preset-env": "^7.13.12",

@@ -36,7 +36,6 @@ export class Auditor {
   // MEMORY 
 
   memory_read(addr, _value, _bytes) {
-    console.log(`mem read`, addr)
     if (addr === 0)
       debugger
     this.read(this.memory_accesses, addr & ~1)

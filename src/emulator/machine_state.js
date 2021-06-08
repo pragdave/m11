@@ -21,7 +21,6 @@ export class MachineState {
   get psw() { return this.memory.psw }
 
   loadAssembledCode(assemblerOutput) {
-    console.log(assemblerOutput.toMemory())
     this.memory.clear()
     this.registers.clear()
 

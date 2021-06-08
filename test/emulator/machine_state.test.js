@@ -19,20 +19,20 @@ test(`Registers remember values`, () => {
   }
 })
 
-test(`Register numbers are checked`, () => {
-  const reg = new MachineState().registers
+// test(`Register numbers are checked`, () => {
+//   const reg = new MachineState().registers
 
-  for (let i = -1; i < 9; i++) {
-    if (i < 0 || i > 7) {
-      expect(() => reg[i] = 1).toThrow()
-      expect(() => reg[i]).toThrow()
-    }
-    else {
-      reg[i] = i
-      expect(reg[i]).toBe(i)
-    }
-  }
-})
+//   for (let i = -1; i < 9; i++) {
+//     if (i < 0 || i > 7) {
+//       expect(() => reg[i] = 1).toThrow()
+//       expect(() => reg[i]).toThrow()
+//     }
+//     else {
+//       reg[i] = i
+//       expect(reg[i]).toBe(i)
+//     }
+//   }
+// })
 
 test(`Registers accept correct range of values`, () => {
   const reg = new MachineState().registers
