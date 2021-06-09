@@ -146,22 +146,31 @@ test(`jsr/rts (mode 7)`, () => {
 
 function common(src) {
   const runner = assembleAndRun(src)
+  let count
   let r, m, psw
 
   [ r, m, psw ] = runner.step();
   const initialSP = r[6]
 
-  do
+  count = 20
+  do {
     [ r, m, psw ] = runner.step();
-  while (r[0] === 0)
+    count--
+  } while (r[0] === 0 && count)
+
+  expect(count).toBeGreaterThan(0)
 
   expect(r[0]).toBe(0o1234)
   expect(r[6]).toBe(initialSP - 2)
   expect(m.w(r[6])).toBe(runner.symbol(`retadr`).value)
 
-  do
+  count = 20
+  do {
     [ r, m, psw ] = runner.step();
-  while (r[1] === 0)
+    count--
+  } while (r[1] === 0 && count)
+  
+  expect(count).toBeGreaterThan(0)
 
   expect(r[0]).toBe(0o1234)
   expect(r[1]).toBe(1)

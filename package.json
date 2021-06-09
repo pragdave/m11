@@ -12,7 +12,8 @@
   "jest": {
     "setupFilesAfterEnv": [
       "jest-expect-message"
-    ]
+    ],
+    "verbose": false
   },
   "dependencies": {
     "moo": "^0.5.1"

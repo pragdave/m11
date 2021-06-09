@@ -16,7 +16,7 @@ start:  com   m1
         .end  start
 `
 
-test(`basic clr`, () => {
+test(`basic com`, () => {
   const runner = assembleAndRun(t1)
   let r, m, psw
  debugger 
@@ -44,13 +44,13 @@ m1:   .byte 101
 m2:   .byte 101
 
 start:  mov   m1, r3
-        clrb  m1
-        clrb  m1+1
-        clrb   r3
+        comb  m1
+        comb  m1+1
+        comb   r3
         .end  start
 `
 
-test(`basic clrb`, () => {
+test(`basic comb`, () => {
   const runner = assembleAndRun(t2)
   let r, m, psw
   
@@ -59,16 +59,17 @@ test(`basic clrb`, () => {
   expect(m.b(`m2`)).toEqual(0o101);
 
   [ r, m, psw ] = runner.step();
-  expect([ m.b(`m1`), psw ]).toEqual([ 0, `•Z••`]);
+  expect([ m.b(`m1`), psw ]).toEqual([ 0o276, `N••C`]);
   expect(m.b(`m2`)).toEqual(0o101);
 
   [ r, m, psw ] = runner.step();
-  expect([ m.b(`m2`), psw ]).toEqual([ 0, `•Z••`]);
+  expect([ m.b(`m1`), psw ]).toEqual([ 0o276, `N••C`]);
+  expect([ m.b(`m2`), psw ]).toEqual([ 0o276, `N••C`]);
 
 
   // TODO: should it clear the whole register?
   [ r, m, psw ] = runner.step();
-  expect([ r[3], psw ]).toEqual([ 0o101 << 8, `•Z••`]);
+  expect([ r[3], psw ]).toEqual([ 0o276 + (0o101 << 8), `N••C`]);
 })
 
 

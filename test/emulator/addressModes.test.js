@@ -9,7 +9,7 @@ start:  mov   #12345, r0
         .end  start
 `
 
-test(`register - register (word)`, () => {
+test(`t1: register - register (word)`, () => {
   const runner = assembleAndRun(t1)
   let r, m, psw
   
@@ -31,7 +31,7 @@ start:  movb  #123, r0
         .end  start
 `
 
-test(`register - register (byte)`, () => {
+test(`t2: register - register (byte)`, () => {
   const runner = assembleAndRun(t2)
   let r, m, psw
   
@@ -56,7 +56,7 @@ start:  mov #input,  r1
         mov (r1)+, (r2)+
         .end start
 `
-test(`autoincrement (word))`, () => {
+test(`t3: autoincrement (word))`, () => {
   const runner = assembleAndRun(t3)
   let r, m, psw
   
@@ -89,7 +89,7 @@ start:  mov  #input,  r1
         movb (r1)+, (r2)+
         .end start
 `
-test(`autoincrement (byte))`, () => {
+test(`t4: autoincrement (byte))`, () => {
   const runner = assembleAndRun(t4)
   let r, m, psw
   
@@ -126,7 +126,7 @@ start:  mov  #input,  r1
         mov  -(r1), -(r2)
         .end start
 `
-test(`autodecrement (word))`, () => {
+test(`t5: autodecrement (word))`, () => {
   const runner = assembleAndRun(t5)
   let r, m, psw
   
@@ -163,7 +163,7 @@ start:  mov  #input,  r1
         movb -(r1), -(r2)
         .end start
 `
-test(`autodecrement (byte))`, () => {
+test(`t6: autodecrement (byte))`, () => {
   const runner = assembleAndRun(t6)
   let r, m, psw
   
@@ -198,7 +198,7 @@ start:  mov  #input,  r1
         movb 3(r1), 0(r2)
         .end start
 `
-test(`indexed (byte))`, () => {
+test(`t7: indexed (byte))`, () => {
   const runner = assembleAndRun(t7)
   let r, m, psw
   
@@ -233,7 +233,7 @@ start:  mov   #data, r0
        .end  start
 `
 
-test(`register deferred`, () => {
+test(`t11: register deferred`, () => {
  const runner = assembleAndRun(t11)
  let r, m, psw
 
@@ -262,7 +262,7 @@ start:  mov  #ptrs,  r1
         mov  @(r1)+, r0
         .end start
 `
-test(`autoincrement deferred`, () => {
+test(`t13: autoincrement deferred`, () => {
   const runner = assembleAndRun(t13)
   let r, m, psw
   
@@ -301,7 +301,7 @@ start:  mov   #inptrs,  r1
         mov   @-(r1), @-(r2)
         .end start
 `
-test(`autodecrement deferred)`, () => {
+test(`t15: autodecrement deferred)`, () => {
   const runner = assembleAndRun(t15)
   let r, m, psw
   let ip = runner.symbol(`inptrs`).value;
@@ -354,7 +354,7 @@ start:  mov  #inptrs,  r4
         mov  @6(r4), @0(r5)
         .end start
 `
-test(`indexed deferred)`, () => {
+test(`t17: indexed deferred)`, () => {
   const runner = assembleAndRun(t17)
   let r, m, psw
   
@@ -388,7 +388,7 @@ start:  mov   #1234,  r0
         mov   @1000,  r3
         .end  start
 `
-test(`PC related (src)`, () => {
+test(`t20: PC related (src)`, () => {
   const runner = assembleAndRun(t20)
   let r, m, psw
   
@@ -419,7 +419,7 @@ start:  mov   #1234,  r0
         mov   #7654, 1000
         .end  start
 `
-test(`PC related (dst)`, () => {
+test(`t21: PC relative (dst)`, () => {
   const runner = assembleAndRun(t21)
   let r, m, psw
 
@@ -442,3 +442,21 @@ test(`PC related (dst)`, () => {
 })
 
 
+const t22 = `
+n1:   .word   1,22
+n2:   .word   3,44
+
+start: mov    n1, n2
+       .end   start
+`
+
+test(`t22: Check PC updated correctly for PC relative`, () => {
+  const runner = assembleAndRun(t22)
+
+  const [ _r, m, _psw ] = runner.step(); //        mov   n1, n2
+  expect(m.w(`n1`)).toEqual(1);
+  expect(m.w(0o1002)).toEqual(0o22);
+  expect(m.w(0o1006)).toEqual(0o44);
+  expect(m.w(`n2`)).toEqual(1);
+  expect(m.w(0o1006)).toEqual(0o44);
+})
