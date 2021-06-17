@@ -310,6 +310,10 @@ export class Parser {
         value = this.parseIntLiteral(next.text, 10)
         break
 
+      case `hex_number`:
+        value = this.parseIntLiteral(next.text, 16)
+        break
+
       case `binary_number`:
         value = this.parseIntLiteral(next.text, 2)
         break
@@ -633,12 +637,11 @@ export class Parser {
       case  `.asciiz`:
       case  `.asciz`:
         const line = sym.text
-        let offset = line.indexOf(` `)
+        let offset = line.search(/\s\S/)
         if (offset < 0) 
-          error(sym, `a .ascii directive needs an argument`)
+          error(sym, `an .ascii(z) directive needs an argument`)
 
-        while (offset < line.length && line[offset] === ` `)
-          offset ++
+        offset ++
 
         if (offset === line.length)
           error(sym, `an ascii directive requires an argument`)
@@ -795,6 +798,9 @@ export class Parser {
 
     switch (sym.type) {
       case `NL`:
+        this.pushBack(sym)
+        break 
+
       case `EOF`:
       case `comment`:
         break

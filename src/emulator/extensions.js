@@ -16,7 +16,7 @@ export function internallyHandledEMT(func, state) {
 
 function func_ttyout(state) {
   const char = state.registers[0] & 0xff
-  console.log(`ttyout`, String.fromCharCode(char))
+  state.callbacks.emtTtyout(String.fromCharCode(char))
 }
 
 function func_print(state) {
@@ -35,6 +35,6 @@ function func_print(state) {
     result.push(String.fromCharCode(char))
   }
 
-  console.log(`print:`, result.join(``))
+  state.callbacks.emtPrint(result.join(``))
 }
 

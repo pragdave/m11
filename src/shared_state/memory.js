@@ -33,7 +33,8 @@ export class Memory {
         return psw & 0xff
     }
     const value = this.ram.getUint8(addr)
-    this.auditor?.memory_read(addr, value, /* bytes: */ 1)
+    if (this.auditor)
+      this.auditor.memory_read(addr, value, /* bytes: */ 1)
     return value
   }
 
@@ -47,7 +48,8 @@ export class Memory {
 
       this.psw.fromWord(psw)
     }
-    this.auditor?.memory_write(addr, value, /* bytes: */ 1)
+    if (this.auditor)
+      this.auditor.memory_write(addr, value, /* bytes: */ 1)
     return this.ram.setUint8(addr, value)
   }
 
@@ -71,7 +73,8 @@ export class Memory {
     if (addr === PSW_ADDR)
       this.psw.fromWord(value)
 
-    this.auditor?.memory_write(addr, value, /* bytes: */ 2)
+    if (this.auditor)
+      this.auditor.memory_write(addr, value, /* bytes: */ 2)
     return this.ram.setUint16(addr, value, true)
   }
 

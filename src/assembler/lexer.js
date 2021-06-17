@@ -17,6 +17,7 @@ export class Lexer {
       octal_number:    /[0-7]+|\^o[0-7]+/,
       binary_number:   /\^b[01]+/,
       decimal_number:  /\^d[0-9]+/,
+      hex_number:      /\^x[0-9A-Fa-f]+/,
       float_number:    /\^f[0-9]\.[0-9]/,
       equals:          `=`,
       comma:           `,`,

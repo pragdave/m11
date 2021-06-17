@@ -1,14 +1,19 @@
 {
-  "name": "m11",
+  "description": "An incomplete PDP-11 emulator intended only as a teaching aid",
+  "name":    "m11",
   "version": "1.0.0",
-  "description": "",
-  "main": "src/main.js",
+  "main":    "src/main.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "jest"
   },
   "keywords": [],
-  "author": "",
-  "license": "ISC",
+
+  "author":     "Dave Thomas <dave@pragdave.me> (https://pragdave.me)",
+  "bugs":       "ihttps://github.com/pragdave/m11/issues",
+  "homepage":   "ihttps://github.com/pragdave/m11",
+  "repository": "github:pragdave/m11",
+
+  "license": "MIT",
   "jest": {
     "setupFilesAfterEnv": [
       "jest-expect-message"

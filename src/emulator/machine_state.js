@@ -12,7 +12,8 @@ export const PS = {
 
 export class MachineState {
 
-  constructor() {
+  constructor(callbacks) {
+    this.callbacks = callbacks
     this.memory = new Memory()
     this.registers = new Registers()
     this.processorState = PS.Paused

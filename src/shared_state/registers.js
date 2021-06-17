@@ -37,14 +37,16 @@ export class Registers {
 
   rget(rno) {
     const value = this.registers[rno]
-    this.auditor?.register_read(rno, value)
+    if (this.auditor)
+      this.auditor.register_read(rno, value)
     return value
   }
 
   rset(rno, value) {
     if (value & ~0xffff) 
       throw new Error(`Attempt to set R${rno} to a value wider than 16 bits (${value})`)
-    this.auditor?.register_write(rno, value)
+    if (this.auditor)
+      this.auditor.register_write(rno, value)
     this.registers[rno] = value
   }
 
