@@ -1,4 +1,6 @@
 .cache
+.parcel-cache
+.cache
 dist/
 min/
 node_modules/

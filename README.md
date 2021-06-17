@@ -158,8 +158,3 @@ hardware following the execution of the code by the emulator:
 Copyright ® 2021 Dave Thomas (pragdave)
 
 [MIT License](./LICENSE.md)
-  `
-
-
-
-
