@@ -1,18 +1,18 @@
 {
   "description": "An incomplete PDP-11 emulator intended only as a teaching aid",
-  "name":    "m11",
-  "version": "1.0.0",
-  "main":    "src/main.js",
+  "name": "pdp11-assembler-emulator",
+  "version": "1.0.1",
+  "main": "dist/main.js",
+  "module": "src/main.js",
   "scripts": {
+    "dist": "esbuild --bundle src/main.js --outdir=dist --minify --sourcemap",
     "test": "jest"
   },
   "keywords": [],
-
-  "author":     "Dave Thomas <dave@pragdave.me> (https://pragdave.me)",
-  "bugs":       "ihttps://github.com/pragdave/m11/issues",
-  "homepage":   "ihttps://github.com/pragdave/m11",
+  "author": "Dave Thomas <dave@pragdave.me> (https://pragdave.me)",
+  "bugs": "https://github.com/pragdave/m11/issues",
+  "homepage": "https://github.com/pragdave/m11",
   "repository": "github:pragdave/m11",
-
   "license": "MIT",
   "jest": {
     "setupFilesAfterEnv": [
@@ -21,6 +21,7 @@
     "verbose": false
   },
   "dependencies": {
+    "esbuild": "^0.14.14",
     "moo": "^0.5.1"
   },
   "devDependencies": {

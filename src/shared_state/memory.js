@@ -40,7 +40,7 @@ export class Memory {
 
   setByte(addr, value) {
     if (addr >= PSW_ADDR) {
-      const psw = this.psw.toWord()
+      let psw = this.psw.toWord()
       if (addr & 1)
         psw = psw & 0xff | (value << 8)
       else
