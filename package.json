@@ -1,7 +1,7 @@
 {
   "description": "An incomplete PDP-11 emulator intended only as a teaching aid",
   "name": "pdp11-assembler-emulator",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "main": "dist/main.js",
   "module": "src/main.js",
   "scripts": {
