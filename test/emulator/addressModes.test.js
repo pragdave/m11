@@ -460,3 +460,23 @@ test(`t22: Check PC updated correctly for PC relative`, () => {
   expect(m.w(`n2`)).toEqual(1);
   expect(m.w(0o1006)).toEqual(0o44);
 })
+
+
+const t23 = `
+n1:   .word   "AB
+
+start: movb   n1, r0
+       movb   n1+1, r1
+       .end   start
+`
+
+test(`t23: Check endianness`, () => {
+  const runner = assembleAndRun(t23)
+  let r, m, psw
+
+  [ r, m, psw ] = runner.step(); 
+  expect(m.b(`n1`)).toEqual(65)
+  expect(r[0]).toEqual(65);
+  [ r, m, psw ] = runner.step();
+  expect(r[1]).toEqual(66);
+})
