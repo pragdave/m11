@@ -348,7 +348,7 @@ export class Parser {
 
       case `double_char`:
         const c1 = next.text.charCodeAt(1)
-        const c2 = next.text.charCodeAt(1)
+        const c2 = next.text.charCodeAt(2)
         if (c1 > 127 || c2 > 127)
           error(next, `Sorry, only 7 bit characters are allowed`)
         value = c2 << 8 | c1
