@@ -163,6 +163,8 @@ export class Parser {
     }
 
     let sym = this.next()
+    let sourceLineNumber = sym.line
+
     let result = {}
 
     if (!sym || sym.type === `EOF`)
@@ -174,12 +176,14 @@ export class Parser {
         case `comment`:
           this.next()
           return {
+            line: sourceLineNumber,
             type: `BlankLine`,
             comment: sym.text,
           }
 
         case `NL`:
           return {
+            line: sourceLineNumber,
             type: `BlankLine`,
             comment: null,
           }
@@ -199,6 +203,7 @@ export class Parser {
           const { tokens, value } = this.parseAssignmentLine(sym)
 
           result = {
+            line: sourceLineNumber,
             type: `AssignmentLine`,
             symbol: sym.text,
             rhs: tokens,
@@ -632,6 +637,7 @@ export class Parser {
     let count
     let generatedBytes = []
     const pos = this.lexer.position()
+    const line = sym.line
 
     switch (sym.value) {
       case  `.ascii`:
@@ -768,6 +774,7 @@ export class Parser {
         error(sym, `unknown directive`)
     }
     return {
+      line,
       type: `DirectiveLine`,
       rhs: this.lexer.tokensFromPosition(pos),
       opcode: sym.text,
@@ -776,7 +783,7 @@ export class Parser {
   }
 
   parseAssignmentLine(sym) {
-    this.expect(`equals`, `(if "${sym.text}" is a label, is it missing a colon at the end?)`)
+    this.expect(`equals`, `expecting ':' (if "${sym.text}" is a label); otherwise expecting an opcode`)
     const { tokens, value } = this.collectTokens(_ => this.parseExpression(this.next()))
     this.context.addAssigned(sym.text, value)
     return { tokens, value }
@@ -784,6 +791,8 @@ export class Parser {
 
   parseLabelledLine(sym) {
     const labels = []
+    const line = sym.line
+
     let returnValue = {
       type: `JustLabels`,
     }
@@ -828,6 +837,7 @@ export class Parser {
       returnValue.comment = sym.value
     }
 
+    returnValue.line = line
     returnValue.labels = labels
     returnValue.address = address
     return returnValue

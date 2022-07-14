@@ -3,6 +3,8 @@ class SourceLine {
   constructor(info) {
     this.type = this.constructor.name
     this.comment = info.comment
+    this.line = info.line
+    this.height_in_lines = 1
   }
 }
 
@@ -14,7 +16,6 @@ class ErrorLine extends SourceLine {
     super(info)
     this.message = info.message
     this.lineText = info.lineText
-    this.line = info.line
     this.col = info.col
     this.symType = info.symType
     this.symText = info.symText
@@ -38,12 +39,23 @@ class JustLabelsLine extends SourceLine {
   }
 }
 
+function calculate_height(addr, bytes) {
+  let len = bytes.length
+  if (addr & 1)
+    len++
+  if (len & 1)
+    len++
+
+  return Math.ceil((len+2)/6)
+}
+
 class CodegenLine extends JustLabelsLine {
   constructor(info) {
     super(info)
     this.opcode = info.opcode
     this.rhs = info.rhs
     this.generatedBytes = info.generatedBytes
+    this.height_in_lines = calculate_height(this.address, this.generatedBytes)
   }
 }
 
