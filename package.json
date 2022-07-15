@@ -3,7 +3,7 @@
   "name": "pdp11-assembler-emulator",
   "version": "1.0.3",
   "main": "dist/main.js",
-  "module": "src/main.js",
+  "module": "src/main.ts",
   "scripts": {
     "dist": "esbuild --bundle src/main.js --outdir=dist --minify --sourcemap",
     "test": "jest"

@@ -1,4 +1,4 @@
-import { otherError } from "./util.js"
+import { otherError } from "./util"
 
 enum SymbolType  {
   undefined,
