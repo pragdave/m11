@@ -1,8 +1,8 @@
-import { decodeTable } from "./instruction_decode"
+import { decodeTable, EmulatorDecoders } from "./instruction_decode"
 import { octal, saddw } from "../helpers"
-import { Auditor } from "./auditor"
+import { AdditionalStatus, Auditor } from "./auditor"
 import { internallyHandledEMT } from "./extensions"
-import { PS } from "./machine_state"
+import { MachineState, MSMemory, MSRegisters, PS } from "./machine_state"
 
 const SP = 6, PC = 7
 
@@ -12,35 +12,45 @@ const WORD_MASK = 0o177777
 const BIT7      = 0o000200
 const BYTE_MASK = 0o000377
 
-const Mask = [ 0, BYTE_MASK, WORD_MASK ]  // indexed by byte count
+// const Mask = [ 0, BYTE_MASK, WORD_MASK ]  // indexed by byte count
 
-function additiveOverflow(src, dst, result) {
+interface Accessor {
+ addr: number
+ getWord: () => number,
+ setWord: (val: number) => void,
+ getByte: () => number,
+ setByte: (val: number) => void,
+}
+
+function additiveOverflow(src: number, dst: number, result: number) {
   return ((src & BIT15) === (dst & BIT15)) &&   // different sign
     ((dst & BIT15) !== (result & BIT15)) // dst same as result
 }
 
-function subtractiveOverflow(minuend, subtrahend, result, msb = BIT15) {
+function subtractiveOverflow(minuend: number, subtrahend: number, result: number, msb = BIT15) {
   return ((minuend & msb) ^ (subtrahend & msb)) &&   // different sign
     ((subtrahend & msb) === (result & msb)) // subtrahend same as result
 }
 
 
-export class Emulator {
+export class Emulator implements EmulatorDecoders {
 
-  constructor(machineState) {
+  machineState: MachineState
+  registers: MSRegisters
+  memory: MSMemory
+  auditor: Auditor
+
+  priorPC = 0
+
+  constructor(machineState: MachineState) {
     this.machineState = machineState
     this.registers    = machineState.registers
     this.memory       = machineState.memory
-    this.auditor      = new Auditor(this.memory, this.registers, this.machineState.psw)
+    this.auditor      = new Auditor(this.memory, this.registers, this.machineState.processorState)
   }
-
-  trap(reason) { // extension point...
-    throw new Error(reason)
-  }
-
 
   getEmulationState(callback = null) {
-    let additionalStatus
+    let additionalStatus: AdditionalStatus
 
     this.auditor.enable()
 
@@ -56,7 +66,9 @@ export class Emulator {
       }
     }
 
-    return this.auditor.reportAndDisable(additionalStatus, this.machineState.processorState)
+    return this
+    .auditor
+    .reportAndDisable(additionalStatus, this.machineState.processorState)
   }
 
   step() {
@@ -79,13 +91,6 @@ export class Emulator {
     })
   }
 
-  // pcRelativeAddress() {
-  //   const pc = this.registers[PC]
-  //   const address = this.memory.getWord(pc)
-  //   this.registers[PC] = pc + 2
-  //   return address
-  // }
-
   fetchAtPC() {
     const pc = this.registers[PC]
     const word = this.memory.getWord(pc)
@@ -93,7 +98,7 @@ export class Emulator {
     return word
   }
 
-  decodeAndRun(instruction) {
+  decodeAndRun(instruction: number) {
     for (let desc of decodeTable) {
       const decoder = desc.decode
       const opcode = instruction & desc.mask
@@ -113,39 +118,27 @@ export class Emulator {
   }
 
 
-  // decode operands, fetching words after the instruction and adjusting the clc accordingly
-
-  // fetchNextWordIfNeeded(dd) {
-  //   // always fetch for index and index deferred. Also fetch of 27 or 37 (immediate or absolute)
-  //   dd = dd & 0o77 
-  //   const mode = dd & 0o60
-  //   if (mode === 0o60 || dd === 0o27 || dd === 0o37) {
-  //     return this.fetchAtPC()
-  //   }
-  //   return null
-  // }
-
-  decode_single(handler, instruction) {
+  decode_single(handler: string, instruction: number) {
     const bytes = (instruction & 0x8000) ? 1 : 2
     const op = this.getOperandAccessor(instruction, bytes)
     this[handler](instruction, op)
   }
 
-  decode_one_and_a_half(handler, instruction) {
+  decode_one_and_a_half(handler: string, instruction: number) {
     const op = this.getOperandAccessor(instruction, 2)
     const rno = (instruction >> 6) & 7
     let reg = this.registers[rno]
     this[handler](instruction, op, rno, reg)
   }
 
-  decode_double(handler, instruction) {
+  decode_double(handler: string, instruction: number) {
     const bytes = (instruction & 0x8000) ? 1 : 2
     const op1 = this.getOperandAccessor(instruction >> 6, bytes)
     const op2 = this.getOperandAccessor(instruction, bytes)
     this[handler](instruction, op1, op2)
   }
 
-  decode_branch(handler, instruction) {
+  decode_branch(handler: string, instruction: number) {
     let offset = instruction & 0xff
     if (offset & 0x80) 
       offset -= 256
@@ -155,80 +148,80 @@ export class Emulator {
     this[handler](instruction, newPC)
   }
 
-  decode_jsr(handler, instruction) {
+  decode_jsr(handler: string, instruction: number) {
     this.decode_one_and_a_half(handler, instruction)
   }
 
-  decode_sob(handler, instruction) {
+  decode_sob(handler: string, instruction: number) {
     const offset = instruction  & 0o77
     const rno = (instruction >> 6) & 7
     let reg = this.registers[rno]
     this[handler](instruction, rno, reg, offset)
   }
 
-  decode_rts(handler, instruction) {
+  decode_rts(handler: string, instruction: number) {
     const rno = instruction  & 7
     let reg = this.registers[rno]
     this[handler](instruction, rno, reg)
   }
 
-  decode_trap(handler, instruction) {
+  decode_trap(handler: string, instruction: number) {
     const func = instruction & 0xff
     this[handler](instruction, func)
   }
 
-  decode_cc(handler, instruction) {
+  decode_cc(handler: string, instruction: number) {
     this[handler](instruction)
     return handler // just until all opcodes implemented
   }
 
-  decode_none(handler, instruction) {
+  decode_none(handler: string, instruction: number) {
     this[handler](instruction)
     return handler // just until all opcodes implemented
   }
 
 
-  getRegisterAccessor(rno) {
+  getRegisterAccessor(rno: number): Accessor {
     return {
       addr: rno,
       getWord: () => {
         const value = this.registers[rno]
           return value
       },
-      setWord: (val) =>  {
+      setWord: (val: number) =>  {
         this.registers[rno] = val & WORD_MASK
       },
       getByte: () => this.registers[rno] & 0xff,
-      setByte: (val) => {
+      setByte: (val: number) => {
         this.registers[rno] = (this.registers[rno] & 0xff00) | (val & 0xff)
       },
     }
   }
 
-  getMemoryAccessor(addr) {
+  getMemoryAccessor(addr: number): Accessor {
     return {
       addr,
       getWord: ()    => {
         const value = this.memory.getWord(addr)
         return value
       },
-      setWord: (val) => {
+      setWord: (val: number) => {
         this.memory.setWord(addr, val)
       },
       getByte: ()    => this.memory.getByte(addr),
-      setByte: (val) => this.memory.setByte(addr, val & BYTE_MASK),
+      setByte: (val: number) => this.memory.setByte(addr, val & BYTE_MASK),
     }
   }
 
 
-  getOperandAccessor(dd, bytes /* 1 or 2 */) {
+  getOperandAccessor(dd: number, bytes: number /* 1 or 2 */): Accessor {
     dd &= 0o77
     const mode = dd >> 3
     const rno  = dd & 7
     let reg    = this.registers[rno]
-    let result
-    let addr
-    let offset
+    let result: number
+    let addr: number
+    let offset: number
 
     switch (mode) {
       case 0:   // Rn
@@ -281,15 +274,15 @@ export class Emulator {
   //
   ////////////////////////////////////////////////////////////////////////////////
 
-    mov(_inst, op1, op2)     {
+    mov(_inst: number, op1: Accessor, op2: Accessor)     {
       const value = op1.getWord()
       op2.setWord(value)
       this.memory.psw.Z = value === 0
-      this.memory.psw.N = value & BIT15
+      this.memory.psw.N = !!(value & BIT15)
       this.memory.psw.V = false
     }
 
-  movb(inst, op1, op2)    { 
+  movb(inst: number, op1: Accessor, op2: Accessor)    { 
     let value = op1.getByte()
     const dest = inst & 0o000377
 
@@ -304,130 +297,130 @@ export class Emulator {
     }
 
     this.memory.psw.Z = value === 0
-    this.memory.psw.N = value & BIT15
+    this.memory.psw.N = !!(value & BIT15)
     this.memory.psw.V = false
   }
 
-  cmp(inst, op1, op2)     { 
+  cmp(inst: number, op1: Accessor, op2: Accessor)     { 
     const psw = this.memory.psw
     const src = op1.getWord()
     const dst = op2.getWord()
     const result = src + ~dst + 1
-    psw.N = result & BIT15
+    psw.N = !!(result & BIT15)
     psw.Z = (result & WORD_MASK) === 0
     this.memory.psw.V = subtractiveOverflow(src, dst, result)
-    this.memory.psw.C = result & ~WORD_MASK
+    this.memory.psw.C = !!(result & ~WORD_MASK)
   }
 
-  cmpb(inst, op1, op2)     { 
+  cmpb(inst: number, op1: Accessor, op2: Accessor)     { 
     const psw = this.memory.psw
     const src = op1.getByte()
     const dst = op2.getByte()
     const result = src + ~dst + 1
-    psw.N = result & BIT7
+    psw.N = !!(result & BIT7)
     psw.Z = (result & BYTE_MASK) === 0
     this.memory.psw.V = subtractiveOverflow(src, dst, result, BIT7)
-    this.memory.psw.C = result & ~BYTE_MASK
+    this.memory.psw.C = !!(result & ~BYTE_MASK)
   }
 
-  bit(inst, op1, op2)     { 
+  bit(inst: number, op1: Accessor, op2: Accessor)     { 
     const psw = this.memory.psw
     const src = op1.getWord()
     const dst = op2.getWord()
     const value = src & dst
-    psw.N = value & BIT15
+    psw.N = !!(value & BIT15)
     psw.Z = value === 0
     psw.V = false
     // psw.C not affected 
   }
 
-  bitb(inst, op1, op2)     { 
+  bitb(inst: number, op1: Accessor, op2: Accessor)     { 
     const psw = this.memory.psw
     const src = op1.getByte()
     const dst = op2.getByte()
     const value = src & dst
-    psw.N = value & BIT7
+    psw.N = !!(value & BIT7)
     psw.Z = value === 0
     psw.V = false
     // psw.C not affected
   }
 
-  bic(inst, op1, op2)     { 
+  bic(inst: number, op1: Accessor, op2: Accessor)     { 
     const psw = this.memory.psw
     const src = op1.getWord()
     const dst = op2.getWord()
     const value = (~src) & dst
     op2.setWord(value)
-    psw.N = value & BIT15
+    psw.N = !!(value & BIT15)
     psw.Z = value === 0
     psw.V = false
     // psw.C not affected
   }
 
-  bicb(_inst, op1, op2)     { 
+  bicb(_inst: number, op1: Accessor, op2: Accessor)     { 
     const psw = this.memory.psw
     const src = op1.getByte()
     const dst = op2.getByte()
     const value = (~src) & dst
     op2.setByte(value)
-    psw.N = value & BIT7
+    psw.N = !!(value & BIT7)
     psw.Z = value === 0
     psw.V = false
     // psw.C not affected
   }
 
-  bis(_inst, op1, op2)     { 
+  bis(_inst: number, op1: Accessor, op2: Accessor)     { 
     const psw = this.memory.psw
     const src = op1.getWord()
     const dst = op2.getWord()
     const value = src | dst
     op2.setWord(value)
-    psw.N = value & BIT15
+    psw.N = !!(value & BIT15)
     psw.Z = value === 0
     psw.V = false
     // psw.C not affected
   }
 
-  bisb(_inst, op1, op2)     { 
+  bisb(_inst: number, op1: Accessor, op2: Accessor)     { 
     const psw = this.memory.psw
     const src = op1.getByte()
     const dst = op2.getByte()
     const value = src | dst
     op2.setByte(value)
-    psw.N = value & BIT7
+    psw.N = !!(value & BIT7)
     psw.Z = value === 0
     psw.V = false
     // psw.C not affected
   }
 
-  add(_inst, op1, op2)     { 
+  add(_inst: number, op1: Accessor, op2: Accessor)     { 
     const psw = this.memory.psw
     const src = op1.getWord()
     const dst = op2.getWord()
     const result = src + dst
 
     psw.Z = (result & WORD_MASK) === 0
-    psw.N = (result & BIT15) 
+    psw.N = !!(result & BIT15) 
     psw.V = additiveOverflow(src, dst, result)
-    psw.C = (result & ~WORD_MASK)
+    psw.C = !!(result & ~WORD_MASK)
 
     op2.setWord(result & WORD_MASK)
   }
 
-  sub(_inst, op1, op2)     { 
+  sub(_inst: number, op1: Accessor, op2: Accessor)     { 
     const psw = this.memory.psw
     const src = op1.getWord()
     const dst = op2.getWord()
     const result = dst - src
 
     psw.Z = (result & WORD_MASK) === 0
-    psw.N = (result & BIT15) 
+    psw.N = !!(result & BIT15) 
     psw.V = subtractiveOverflow(dst, src, result)
-    psw.C = (result & ~WORD_MASK)
+    psw.C = !!(result & ~WORD_MASK)
     op2.setWord(result & WORD_MASK)
   }
 
-  mul(_inst, op1, rno, reg)     { 
+  mul(_inst: number, op1: Accessor, rno: number, reg: number)     { 
     const psw = this.memory.psw
     let src = op1.getWord()
 
@@ -453,7 +446,7 @@ export class Emulator {
     psw.C = (result < -32768) || (result > 32767)
   }
 
-  div(_inst, op1, rno, reg)     { 
+  div(_inst: number, op1: Accessor, rno: number, reg: number)     { 
     const psw = this.memory.psw
     let src = op1.getWord()
     if (rno & 1) 
@@ -476,7 +469,7 @@ export class Emulator {
       const quotient = Math.floor(dividend / src) >> 0  
       const remainder = dividend % src
 
-      if (Math.abs(quotient > 32767)) {
+      if (Math.abs(quotient) > 32767) {
         psw.V = true
       }
 
@@ -489,16 +482,16 @@ export class Emulator {
 
   }
 
-  ash(_inst, _op1)     { console.error(`missing ash`) }
-  ashc(_inst, _op1)    { console.error(`missing ashc`) }
+  ash(_inst: number, _op1: Accessor)     { console.error(`missing ash`) }
+  ashc(_inst: number, _op1: Accessor)    { console.error(`missing ashc`) }
 
-  xor(_inst, op1, _rno, reg) {
+  xor(_inst:number, op1: Accessor, _rno: number, reg: number) {
     const psw = this.memory.psw
     const dst = op1.getWord()
     const result = reg ^ dst
     op1.setWord(result)
 
-    psw.N = result & BIT15
+    psw.N = !!(result & BIT15)
     psw.Z = result === 0
     psw.V = false
     // psw.C unchanged
@@ -506,7 +499,7 @@ export class Emulator {
   }
 
 
-  sob(_inst, rno, reg, offset) { 
+  sob(_inst: number, rno: number, reg: number, offset: number) { 
     reg -= 1 
     this.registers[rno] = reg & 0xffff
     if (reg !== 0) {
@@ -514,13 +507,13 @@ export class Emulator {
     }
   }
 
-  jmp(_inst, op1) {
+  jmp(_inst: number, op1: Accessor) {
     const target = op1.addr
     debugger
     this.registers[PC] = target
   }
 
-  swab(_inst, op1)     { 
+  swab(_inst: number, op1: Accessor)     { 
     let psw = this.memory.psw
     let value = op1.getWord()
 
@@ -530,14 +523,14 @@ export class Emulator {
     op1.setWord(value)
 
     lob = value & 0xff
-    psw.N = lob & BIT7
+    psw.N = !!(lob & BIT7)
     psw.Z = lob === 0 
     psw.V = false
     psw.C = false
   }
 
 
-  clr(_inst, op1) {
+  clr(_inst: number, op1: Accessor) {
     op1.setWord(0)
     this.memory.psw.Z = true
     this.memory.psw.N = false
@@ -545,7 +538,7 @@ export class Emulator {
     this.memory.psw.C = false
   }
 
-  clrb(_inst, op1) {
+  clrb(_inst: number, op1: Accessor) {
     op1.setByte(0)
     this.memory.psw.Z = true
     this.memory.psw.N = false
@@ -553,65 +546,65 @@ export class Emulator {
     this.memory.psw.C = false
   }
 
-  com(_inst, op1) {
+  com(_inst: number, op1: Accessor) {
     const value = ~op1.getWord() & WORD_MASK
     op1.setWord(value)
     this.memory.psw.Z = value === 0
-    this.memory.psw.N = value & BIT15
+    this.memory.psw.N = !!(value & BIT15)
     this.memory.psw.V = false
     this.memory.psw.C = true
   }
 
-  comb(_inst, op1) {
+  comb(_inst: number, op1: Accessor) {
     const value = ~op1.getByte() & BYTE_MASK
     op1.setByte(value)
     this.memory.psw.Z = value === 0
-    this.memory.psw.N = value & BIT7
+    this.memory.psw.N = !!(value & BIT7)
     this.memory.psw.V = false
     this.memory.psw.C = true
   }
 
 
-  inc(_inst, op1)     {
+  inc(_inst: number, op1: Accessor)     {
     let value = op1.getWord()
     this.memory.psw.V = value === 0o077777
 
     value += 1
     op1.setWord(value)
     this.memory.psw.Z = (value & WORD_MASK) === 0
-    this.memory.psw.N = value & BIT15
+    this.memory.psw.N = !!(value & BIT15)
   }
 
-  incb(_inst, op1)     {
+  incb(_inst: number, op1: Accessor)     {
     let value = op1.getByte()
     this.memory.psw.V = value === 0o000177
     value += 1
     op1.setByte(value)
     this.memory.psw.Z = (value & BYTE_MASK) === 0
-    this.memory.psw.N = value & BIT7
+    this.memory.psw.N = !!(value & BIT7)
   }
 
-  dec(_inst, op1)     { 
+  dec(_inst: number, op1: Accessor)     { 
     let value = op1.getWord()
     this.memory.psw.V = value === 0o100000
 
     value -= 1
     op1.setWord(value)
     this.memory.psw.Z = (value & WORD_MASK) === 0
-    this.memory.psw.N = value & BIT15
+    this.memory.psw.N = !!(value & BIT15)
   }
 
-  decb(_inst, op1)     { 
+  decb(_inst: number, op1: Accessor)     { 
     let value = op1.getByte()
     this.memory.psw.V = value === 0o000200
 
     value -= 1
     op1.setByte(value)
     this.memory.psw.Z = (value & BYTE_MASK) === 0
-    this.memory.psw.N = value & BIT7
+    this.memory.psw.N = !!(value & BIT7)
   }
 
-  neg(_inst, op1)     { 
+  neg(_inst: number, op1: Accessor)     { 
     let value = op1.getWord()
     this.memory.psw.V = value === 0o100000
 
@@ -619,11 +612,11 @@ export class Emulator {
 
     op1.setWord(value)
     this.memory.psw.Z = (value & WORD_MASK) === 0
-    this.memory.psw.N = value & BIT15
+    this.memory.psw.N = !!(value & BIT15)
     this.memory.psw.C = !this.memory.psw.Z
   }
 
-  negb(_inst, op1)     { 
+  negb(_inst: number, op1: Accessor)     { 
     let value = op1.getByte()
     this.memory.psw.V = value === 0o200
 
@@ -631,11 +624,11 @@ export class Emulator {
 
     op1.setByte(value)
     this.memory.psw.Z = (value & BYTE_MASK) === 0
-    this.memory.psw.N = value & BIT7
+    this.memory.psw.N = !!(value & BIT7)
     this.memory.psw.C = !this.memory.psw.Z
   }
 
-  adc(_inst, op1)     { 
+  adc(_inst: number, op1: Accessor)     { 
     const psw = this.memory.psw
     let value = op1.getWord()
     if (psw.C) {
@@ -644,11 +637,11 @@ export class Emulator {
       value = (value + 1) & WORD_MASK
       op1.setWord(value)
     }
-    psw.N = value & BIT15
+    psw.N = !!(value & BIT15)
     psw.Z = value === 0
   }
 
-  adcb(_inst, op1)     { 
+  adcb(_inst: number, op1: Accessor)     { 
     const psw = this.memory.psw
     let value = op1.getByte()
     if (psw.C) {
@@ -657,11 +650,11 @@ export class Emulator {
       value = (value + 1) & WORD_MASK
       op1.setByte(value)
     }
-    psw.N = value & BIT15
+    psw.N = !!(value & BIT15)
     psw.Z = value === 0
   }
 
-  sbc(_inst, op1)     { 
+  sbc(_inst: number, op1: Accessor)     { 
     const psw = this.memory.psw
     let value = op1.getWord()
     if (psw.C) {
@@ -670,11 +663,11 @@ export class Emulator {
       value = (value - 1) & WORD_MASK
       op1.setWord(value)
     }
-    psw.N = value & BIT15
+    psw.N = !!(value & BIT15)
     psw.Z = value === 0
   }
 
-  sbcb(_inst, op1)     { 
+  sbcb(_inst: number, op1: Accessor)     { 
     const psw = this.memory.psw
     let value = op1.getByte()
     if (psw.C) {
@@ -683,27 +676,27 @@ export class Emulator {
       value = (value - 1) & BYTE_MASK
       op1.setByte(value)
     }
-    psw.N = value & BIT7 
+    psw.N = !!(value & BIT7) 
     psw.Z = value === 0
   }
 
-  tst(_inst, op1)     {
+  tst(_inst: number, op1: Accessor)     {
     let value = op1.getWord()
-    this.memory.psw.N = value & BIT15
+    this.memory.psw.N = !!(value & BIT15)
     this.memory.psw.Z = (value & WORD_MASK) === 0
     this.memory.psw.V = false
     this.memory.psw.C = false
   }
 
-  tstb(_inst, op1)     {
+  tstb(_inst: number, op1: Accessor)     {
     let value = op1.getByte()
-    this.memory.psw.N = value & BIT7
+    this.memory.psw.N = !!(value & BIT7)
     this.memory.psw.Z = (value & BYTE_MASK) === 0
     this.memory.psw.V = false
     this.memory.psw.C = false
   }
 
-  ror(_inst, op1)     { 
+  ror(_inst: number, op1: Accessor)     { 
     const psw = this.memory.psw
 
     let value = op1.getWord()
@@ -717,14 +710,14 @@ export class Emulator {
     else
       psw.N = false
 
-    psw.C = cbit
+    psw.C = !!cbit
     psw.Z = value === 0
-    psw.V = psw.N ^ psw.C
+    psw.V = psw.N !== psw.C
 
     op1.setWord(value)
   }
 
-  rorb(_inst, op1)     { 
+  rorb(_inst: number, op1: Accessor)     { 
     const psw = this.memory.psw
 
     let value = op1.getByte() 
@@ -738,14 +731,14 @@ export class Emulator {
     else
       psw.N = false
 
-    psw.C = cbit
+    psw.C = !!cbit
     psw.Z = value === 0
-    psw.V = psw.N ^ psw.C
+    psw.V = psw.N !== psw.C
 
     op1.setByte(value)
   }
 
-  rol(inst, op1)     { 
+  rol(_inst: number, op1: Accessor)     { 
     const psw = this.memory.psw
 
     let value = op1.getWord() 
@@ -756,15 +749,15 @@ export class Emulator {
       value = value | 1
     }
 
-    psw.N = value & BIT15
-    psw.C = cbit
+    psw.N = !!(value & BIT15)
+    psw.C = !!cbit
     psw.Z = value === 0
-    psw.V = psw.N ^ psw.C
+    psw.V = psw.N !== psw.C
 
     op1.setWord(value)
   }
 
-  rolb(inst, op1)     { 
+  rolb(_inst: number, op1: Accessor)     { 
     const psw = this.memory.psw
 
     let value = op1.getByte() 
@@ -775,16 +768,16 @@ export class Emulator {
       value = value | 1
     }
 
-    psw.N = value & BIT7
-    psw.C = cbit
+    psw.N = !!(value & BIT7)
+    psw.C = !!cbit
     psw.Z = value === 0
-    psw.V = psw.N ^ psw.C
+    psw.V = psw.N !== psw.C
 
     op1.setByte(value)
   }
 
 
-  asr(inst, op1)     { 
+  asr(_inst: number, op1: Accessor)     { 
     let value = op1.getWord() 
     this.memory.psw.C = (value & 1) === 1
 
@@ -799,12 +792,12 @@ export class Emulator {
     }
 
     this.memory.psw.Z = value === 0
-    this.memory.psw.V = this.memory.psw.N ^ this.memory.psw.C
+    this.memory.psw.V = this.memory.psw.N !== this.memory.psw.C
 
     op1.setWord(value)
   }
 
-  asrb(inst, op1)     { 
+  asrb(_inst: number, op1: Accessor)     { 
     let value = op1.getByte() 
     this.memory.psw.C = (value & 1) === 1
 
@@ -819,124 +812,124 @@ export class Emulator {
     }
 
     this.memory.psw.Z = value === 0
-    this.memory.psw.V = this.memory.psw.N ^ this.memory.psw.C
+    this.memory.psw.V = this.memory.psw.N !== this.memory.psw.C
 
     op1.setByte(value)
   }
 
 
-  asl(inst, op1)     { 
+  asl(_inst: number, op1: Accessor)     { 
     let value = op1.getWord() 
     this.memory.psw.C = (value & BIT15) !== 0
 
     value = (value << 1) & WORD_MASK
 
-    this.memory.psw.N = value & BIT15
+    this.memory.psw.N = !!(value & BIT15)
     this.memory.psw.Z = value === 0
-    this.memory.psw.V = this.memory.psw.N ^ this.memory.psw.C
+    this.memory.psw.V = this.memory.psw.N !== this.memory.psw.C
 
     op1.setWord(value)
   }
 
-  aslb(inst, op1)     { 
+  aslb(_inst: number, op1: Accessor)     { 
     let value = op1.getByte() 
     this.memory.psw.C = (value & BIT7) !== 0
 
     value = (value << 1) & BYTE_MASK
 
-    this.memory.psw.N = value & BIT7
+    this.memory.psw.N = !!(value & BIT7)
     this.memory.psw.Z = value === 0
-    this.memory.psw.V = this.memory.psw.N ^ this.memory.psw.C
+    this.memory.psw.V = this.memory.psw.N !== this.memory.psw.C
 
     op1.setByte(value)
   }
 
-  mark(_inst, _op1) { console.error(`missing mark`) }
-  mtps(_inst, _op1) { console.error(`missing mtps`) }
-  mfpi(_inst, _op1) { console.error(`missing mfpi`) }
-  mfpd(_inst, _op1) { console.error(`missing mfpd`) }
-  mtpi(_inst, _op1) { console.error(`missing mtpi`) }
-  mtpd(_inst, _op1) { console.error(`missing mtpd`) }
+  mark(_inst: number, _op1: Accessor) { console.error(`missing mark`) }
+  mtps(_inst: number, _op1: Accessor) { console.error(`missing mtps`) }
+  mfpi(_inst: number, _op1: Accessor) { console.error(`missing mfpi`) }
+  mfpd(_inst: number, _op1: Accessor) { console.error(`missing mfpd`) }
+  mtpi(_inst: number, _op1: Accessor) { console.error(`missing mtpi`) }
+  mtpd(_inst: number, _op1: Accessor) { console.error(`missing mtpd`) }
 
-  sxt(i_inst, op1)  { 
+  sxt(_inst: number, op1: Accessor)  { 
     let psw = this.memory.psw
     op1.setWord(psw.N ? 0o177777 : 0)
     psw.Z = !psw.N
   }
 
 
-  mfps(_inst, op1) { console.error(`missing mpfs`) }
+  mfps(_inst: number, _op1: Accessor) { console.error(`missing mpfs`) }
 
-  brIF(bool, newPC) {
+  brIF(bool: boolean, newPC: number) {
     if (bool)
       this.registers[PC] = newPC
   }
 
-  br(_inst, newPC)   {
+  br(_inst: number, newPC: number)   {
     this.brIF(true, newPC)
   }
 
-  bne(_inst, newPC)  { 
+  bne(_inst: number, newPC: number)  { 
     this.brIF(!this.memory.psw.Z, newPC)
   }
 
-  beq(_inst, newPC)  { 
+  beq(_inst: number, newPC: number)  { 
     this.brIF(this.memory.psw.Z, newPC)
   }
 
-  bpl(_inst, newPC)  { 
+  bpl(_inst: number, newPC: number)  { 
     this.brIF(!this.memory.psw.N, newPC)
   }
 
-  bmi(_inst, newPC)  { 
+  bmi(_inst: number, newPC: number)  { 
     this.brIF(this.memory.psw.N, newPC)
   }
 
-  bvc(_inst, newPC)  { 
+  bvc(_inst: number, newPC: number)  { 
     this.brIF(!this.memory.psw.V, newPC)
   }
 
-  bvs(_inst, newPC)  { 
+  bvs(_inst: number, newPC: number)  { 
     this.brIF(this.memory.psw.V, newPC)
   }
 
-  bcc(_inst, newPC)  { 
+  bcc(_inst: number, newPC: number)  { 
     this.brIF(!this.memory.psw.C, newPC)
   }
 
-  bcs(_inst, newPC)  { 
+  bcs(_inst: number, newPC: number)  { 
     this.brIF(this.memory.psw.C, newPC)
   }
 
-  bge(_inst, newPC)  { 
-    this.brIF(!(this.memory.psw.N ^ this.memory.psw.V), newPC)
+  bge(_inst: number, newPC: number)  { 
+    this.brIF(!(this.memory.psw.N !== this.memory.psw.V), newPC)
   }
 
-  blt(_inst, newPC)  { 
-    this.brIF(this.memory.psw.N ^ this.memory.psw.V, newPC)
+  blt(_inst: number, newPC: number)  { 
+    this.brIF(this.memory.psw.N !== this.memory.psw.V, newPC)
   }
 
-  bgt(_inst, newPC)  { 
-    this.brIF(!(this.memory.psw.Z || (this.memory.psw.N ^ this.memory.psw.V)), newPC)
+  bgt(_inst: number, newPC: number)  { 
+    this.brIF(!(this.memory.psw.Z || (this.memory.psw.N !== this.memory.psw.V)), newPC)
   }
 
-  ble(_inst, newPC)  { 
-    this.brIF(this.memory.psw.Z || (this.memory.psw.N ^ this.memory.psw.V), newPC)
+  ble(_inst: number, newPC: number)  { 
+    this.brIF(this.memory.psw.Z || (this.memory.psw.N !== this.memory.psw.V), newPC)
   }
 
 
-  bhi(_inst, newPC)  { 
+  bhi(_inst: number, newPC: number)  { 
     this.brIF(!(this.memory.psw.C || this.memory.psw.Z), newPC)
   }
 
-  blos(_inst, newPC) { 
+  blos(_inst: number, newPC: number) { 
     this.brIF(this.memory.psw.C || this.memory.psw.Z, newPC)
   }
 
 
 
 
-  jsr(inst, op1, rno, reg)     { 
+  jsr(_inst: number, op1: Accessor, rno: number, reg: number)     { 
     let target = op1.addr
     this.registers[SP] -= 2
     this.memory.setByteOrWord(this.registers[SP], reg, 2)
@@ -946,17 +939,17 @@ export class Emulator {
     this.registers[PC]  = target
   }
 
-  rts(_instruction, rno, reg) {
+  rts(_instruction: number, rno: number, reg: number) {
     if (rno !== PC)
       this.registers[PC] = reg
     this.registers[rno] = this.memory.getByteOrWord(this.registers[SP], 2)
     this.registers[SP] += 2
   }
 
-  dispatchVia(address, opcodeName) {
+  dispatchVia(address: number, opcodeName: string) {
     const sp = this.registers[SP] - 4
-    this.memory.setByteOrWord(sp, this.registers[PC])
-    this.memory.setByteOrWord(sp + 2, this.memory.psw.toWord())
+    this.memory.setByteOrWord(sp, this.registers[PC], 2)
+    this.memory.setByteOrWord(sp + 2, this.memory.psw.toWord(), 2)
     this.registers[SP] = sp
     this.registers[PC] = this.memory.getWord(address)
     this.memory.psw.fromWord(this.memory.getWord(address + 2))
@@ -967,18 +960,18 @@ export class Emulator {
     }
   }
 
-  emt(_inst, func) { 
+  emt(_inst: number, func: number) { 
     if (!internallyHandledEMT(func, this.machineState)) {
       this.dispatchVia(0o30, `EMT`)
     }
   }
 
-  trap(_inst)     { 
+  trap(_inst: number)     { 
     this.dispatchVia(0o34, `TRAP`)
   }
 
 
-  ccc(inst)     { 
+  ccc(inst: number)     { 
     const psw = this.memory.psw
     if (inst & 0b1000) psw.N = false
     if (inst & 0b0100) psw.Z = false
@@ -986,7 +979,7 @@ export class Emulator {
     if (inst & 0b0001) psw.C = false
   }
 
-  scc(inst)     { 
+  scc(inst: number)     { 
     const psw = this.memory.psw
     if (inst & 0b1000) psw.N = true
     if (inst & 0b0100) psw.Z = true
@@ -994,16 +987,16 @@ export class Emulator {
     if (inst & 0b0001) psw.C = true
   }
 
-  rti(_inst)     { console.error(`missing rti`) }
-  bpt(_inst)     { console.error(`missing bpt`) }
-  iot(_inst)     { console.error(`missing iot`) }
-  rtt(_inst)     { console.error(`missing rtt`) }
+  rti(_inst: number)     { console.error(`missing rti`) }
+  bpt(_inst: number)     { console.error(`missing bpt`) }
+  iot(_inst: number)     { console.error(`missing iot`) }
+  rtt(_inst: number)     { console.error(`missing rtt`) }
 
-  halt(_inst)   { 
+  halt(_inst: number)   { 
     this.machineState.processorState = PS.Halted
   }
 
-  wait(_inst)    { console.error(`missing wait`) }
-  reset(_inst)   { console.error(`missing reset`) }
+  wait(_inst: number)    { console.error(`missing wait`) }
+  reset(_inst: number)   { console.error(`missing reset`) }
 
 }

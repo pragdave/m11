@@ -1,14 +1,18 @@
 import { otherError } from "./util.js"
 
-const SymbolType = {
-  undefined: 0,
-  label: 1,
-  assigned: 2,
+enum SymbolType  {
+  undefined,
+  label,
+  assigned,
 }
 
-class Symbol {
+export class SymbolTableEntry {
 
-  constructor(name, value, type) {
+  name: string
+  value: number
+  type: SymbolType
+
+  constructor(name: string, value: number, type: SymbolType) {
     this.name = name
     this.value = value
     this.type = type
@@ -19,16 +23,21 @@ class Symbol {
   }
 }
 
+type Table = Record<string, SymbolTableEntry>
+
 export class SymbolTable {
+
+  private symbols: Table = {}
+
   constructor() {
     this.symbols = {}
   }
 
-  lookup(name) {
+  lookup(name: string) {
     return this.symbols[name]
   }
 
-  getValueOf(name) {
+  getValueOf(name: string): number | undefined {
     const sym = this.lookup(name)
     if (sym)
       return sym.value
@@ -36,7 +45,7 @@ export class SymbolTable {
       return undefined
   }
 
-  setValueOf(name, value) {
+  setValueOf(name: string, value: number) {
     const sym = this.lookup(name)
     if (sym)
       sym.value = value
@@ -44,22 +53,22 @@ export class SymbolTable {
       otherError(`attempt to update nonexistent symbol "${name}"`)
   }
 
-  addValue(name, value, type) {
+  addValue(name: string, value: number, type: SymbolType) {
     if (name !== `.` && name in this.symbols) {
       if (this.symbols[name].value !== value) {
-        otherError(`Symbol "${name}" has multiple values (maybe a duplicate definition?)`)
+        otherError(`SymbolTableEntry "${name}" has multiple values (maybe a duplicate definition?)`)
       }
     }
     else {
-      this.symbols[name] = new Symbol(name, value, type)
+      this.symbols[name] = new SymbolTableEntry(name, value, type)
     }
   }
 
-  addAssigned(name, value) {
+  addAssigned(name: string, value: number) {
     this.addValue(name, value, SymbolType.assigned)
   }
 
-  addLabel(name, value) {
+  addLabel(name: string, value: number) {
     this.addValue(name, value, SymbolType.label)
   }
 }

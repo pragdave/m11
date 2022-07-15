@@ -1,14 +1,25 @@
-import Moo from "moo"
-
+import { compile, keywords, Lexer, Token } from "moo"
 import { Opcodes, Directives, Registers } from "./predefined"
 
-export class Lexer {
+export interface LexToken {
+  line: number
+  col: number
+  type: string
+  text?: string
+}
+
+export class PDPLexer {
+
+  private lexer: Lexer
+  private tokens: LexToken[]
+  private offset: number 
+
 
   constructor() {
 
     const symbol = `[a-z.$][a-z0-9.$]*` 
 
-    this.lexer = Moo.compile({
+    this.lexer = compile({
       WS:              /[ \t]+/,
       comment:         /;.*?$/,
       label:           new RegExp(symbol + `:`),
@@ -40,7 +51,7 @@ export class Lexer {
 
       symbol:  {
         match: new RegExp(symbol), 
-        type: Moo.keywords({ 
+        type: keywords({ 
           opcode:    Opcodes,
           directive: Directives,
           register:  Object.keys(Registers),
@@ -52,9 +63,16 @@ export class Lexer {
     this.tokens = []
   }
 
-  analyze(text) {
+  analyze(text: string) {
     this.lexer.reset(text)
-    this.tokens = Array.from(this.lexer)
+    this.tokens = Array.from(this.lexer).map(t => {
+      return {
+        line: t.line,
+        col:  t.col,
+        type: t.type,
+        text: t.text,
+      }
+    })
     this.rewind()
   }
 
@@ -72,7 +90,7 @@ export class Lexer {
     return token
   }
 
-  peek() {
+  peek(): LexToken {
     const token = this.tokens[this.offset]
     if (token)
       return token
@@ -85,7 +103,7 @@ export class Lexer {
     return { type: `EOF`, line: 1, col: 0 }
   }
 
-  peekNotWS() {
+  peekNotWS(): LexToken {
     let sym = this.peek()
     while (sym && (sym.type === `WS`)) {
       this.offset++
@@ -94,7 +112,7 @@ export class Lexer {
     return sym
   }
 
-  nextNotWS(_lexer) {
+  nextNotWS() {
     let sym = this.peekNotWS()
     if (sym)
       this.offset++
@@ -102,7 +120,7 @@ export class Lexer {
     return sym
   }
 
-  pushBack(sym) {
+  pushBack(sym: LexToken) {
     this.offset--
     if (this.tokens[this.offset] !== sym)
       throw new Error(`pushback error`)
@@ -112,7 +130,7 @@ export class Lexer {
     return this.offset
   }
 
-  tokensFromPosition(pos) {
+  tokensFromPosition(pos: number) {
     // if (pos < this.tokens.length && this.tokens[pos].type === `WS`)
     //   pos++
 

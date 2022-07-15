@@ -1,5 +1,5 @@
-import { Emulator } from "../../src/emulator/emulator"
-import { MachineState } from "../../src/emulator/machine_state"
+import { Emulator } from "../../dist/emulator/emulator"
+import { MachineState } from "../../dist/emulator/machine_state"
 
 const emulator = new Emulator(new MachineState());
 

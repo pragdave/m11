@@ -1,5 +1,5 @@
-import { Parser, MachineState, Emulator } from "../src/main"
-export { octal } from "../src/helpers"
+import { Parser, MachineState, Emulator } from "../dist/main"
+export { octal } from "../dist/helpers"
 
 export function assembleAndRun(src) {
   const parser = new Parser(src)

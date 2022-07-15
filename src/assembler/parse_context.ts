@@ -5,6 +5,12 @@ import { octal } from "../helpers"
 
 export class ParseContext {
 
+  symbols: SymbolTable
+  generated: any
+  forward_references: Record<string, number>
+  memory: Memory
+
+
   constructor() {
     this.symbols = new SymbolTable()
     this.symbols.addLabel(`.`, 0o1000)
@@ -21,22 +27,22 @@ export class ParseContext {
   set clc(val) { this.symbols.setValueOf(`.`, val) }
 
 
-  addLabel(symbol) {
+  addLabel(symbol: string) {
     if (symbol.endsWith(`:`))
       symbol = symbol.slice(0, -1)
 
     this.symbols.addLabel(symbol, this.clc)
   }
 
-  addAssigned(name, value) {
+  addAssigned(name: string, value: number) {
     this.symbols.addAssigned(name, value)
   }
 
-  lookupSymbol(name) {
+  lookupSymbol(name: string) {
     return this.symbols.lookup(name)
   }
 
-  addInstruction(instruction, additionalWords) {
+  addInstruction(instruction: number, additionalWords: number[]) {
     const allWords = [ instruction ]
 
     this.storeWordInMemory(instruction, MemInstruction)
@@ -50,7 +56,7 @@ export class ParseContext {
     return allWords
   }
 
-  addForwardReference(symbol, lineNo) {
+  addForwardReference(symbol: string, lineNo: number) {
     this.forward_references[symbol] = lineNo
   }
 
@@ -68,11 +74,11 @@ export class ParseContext {
     return result
   }
 
-  storeByteInMemory(value, _type) {
+  storeByteInMemory(value: number, _type: any) {
     this.memory.setByte(this.clc++, value & 0xff)
   }
 
-  storeWordInMemory(value, _type) {
+  storeWordInMemory(value: number, _type: any) {
     if ((this.clc & 1) === 0) {
       this.memory.setWord(this.clc, value)
       this.clc += 2

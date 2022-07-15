@@ -1,27 +1,41 @@
 import { Memory } from "../shared_state/memory"
 import { Registers } from "../shared_state/registers"
+import { SourceCode } from "../shared_state/source_code"
+
+export type MSMemory = Memory
+export type MSRegisters = Registers
 
 // processor state
-export const PS = {
-  Paused: 1,
-  Running: 2,
-  Trapped: 3,
-  Halted:  4,
-  Waiting: 5,
+export enum PS  {
+  Paused,
+  Running,
+  Trapped,
+  Halted,
+  Waiting,
+}
+
+interface Callbacks {
+  emtTtyout: (msg: string) => void
+  emtPrint: (msg: string) => void
 }
 
 export class MachineState {
 
-  constructor(callbacks) {
-    this.callbacks = callbacks
+  memory: MSMemory
+  registers: MSRegisters
+  processorState: PS
+  callbacks: Callbacks
+
+  constructor(callbacks: Callbacks) {
     this.memory = new Memory()
     this.registers = new Registers()
+    this.callbacks = callbacks
     this.processorState = PS.Paused
   }
 
   get psw() { return this.memory.psw }
 
-  loadAssembledCode(assemblerOutput) {
+  loadAssembledCode(assemblerOutput: SourceCode) {
     this.memory.clear()
     this.registers.clear()
 

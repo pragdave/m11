@@ -9,7 +9,12 @@ export const
   TRAP      = 103
 
 
+  type Event = [ string, any[]]
+type EventList = Event[]
+
 export class EventRecorder {
+
+  eventList: EventList = []
 
   constructor() {
     this.reset()
@@ -20,7 +25,7 @@ export class EventRecorder {
   }
 
 
-  record(type, args) {
+  record(type: string, args: any[]) {
     console.log(`record`, type, args)
     this.eventList.push([ type, args ])
   }

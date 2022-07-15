@@ -1,4 +1,9 @@
+import { Auditor } from "../emulator/auditor"
+
 export class Registers {
+
+  public registers: number[]
+  private auditor: Auditor
 
   constructor() {
     this.clear()
@@ -35,14 +40,14 @@ export class Registers {
   set [`pc`](val) { this.rset(7, val)   }
 
 
-  rget(rno) {
+  rget(rno: number) {
     const value = this.registers[rno]
     if (this.auditor)
       this.auditor.register_read(rno, value)
     return value
   }
 
-  rset(rno, value) {
+  rset(rno: number, value: number) {
     if (value & ~0xffff) 
       throw new Error(`Attempt to set R${rno} to a value wider than 16 bits (${value})`)
     if (this.auditor)
@@ -54,7 +59,7 @@ export class Registers {
     this.registers = [ 0, 0, 0, 0, 0, 0, 0, 0 ]
   }
 
-  setAuditor(auditor) {
+  setAuditor(auditor: Auditor) {
     this.auditor = auditor
   }
 }

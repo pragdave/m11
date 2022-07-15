@@ -1,5 +1,5 @@
 import { assembleAndRun } from "../helpers" 
-import { octal } from "../../src/helpers"
+import { octal } from "../../dist/helpers"
 
 const t1 = `
 . = 1000

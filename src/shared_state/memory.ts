@@ -1,14 +1,19 @@
+import { Auditor } from "../emulator/auditor"
 import { PSW } from "./psw"
 
 const MEMORY_SIZE = 0o200000
 const PSW_ADDR    = 0o177776
 
 
-function octal(val) {
+function octal(val: number) {
   return val.toString(8).padStart(6, `0`)
 }
 
 export class Memory {
+
+  psw: PSW
+  ram: DataView
+  auditor: Auditor
 
   constructor() {
     this.clear()
@@ -20,11 +25,11 @@ export class Memory {
     this.ram = new DataView(bytes)
   }
 
-  setAuditor(auditor) {
+  setAuditor(auditor: Auditor) {
     this.auditor = auditor
   }
 
-  getByte(addr) {
+  getByte(addr: number): number {
     if (addr >= PSW_ADDR) {
       const psw = this.psw.toWord()
       if (addr & 1)
@@ -38,7 +43,7 @@ export class Memory {
     return value
   }
 
-  setByte(addr, value) {
+  setByte(addr: number, value: number) {
     if (addr >= PSW_ADDR) {
       let psw = this.psw.toWord()
       if (addr & 1)
@@ -53,7 +58,7 @@ export class Memory {
     return this.ram.setUint8(addr, value)
   }
 
-  getWord(addr, audit = true) {
+  getWord(addr: number, audit = true): number {
     if (addr & 1)
       throw new Error(`word fetch from odd address (${octal(addr)})`)
 
@@ -66,7 +71,7 @@ export class Memory {
     return value
   }
 
-  setWord(addr, value) {
+  setWord(addr: number, value: number) {
     if (addr & 1)
       throw new Error(`word store from odd address (${octal(addr)})`)
 
@@ -78,11 +83,11 @@ export class Memory {
     return this.ram.setUint16(addr, value, true)
   }
 
-  getByteOrWord(addr, count) {
+  getByteOrWord(addr: number, count: number) {
     return count === 1 ? this.getByte(addr) : this.getWord(addr)
   }
 
-  setByteOrWord(addr, value, count) {
+  setByteOrWord(addr: number, value: number, count: number) {
     return count === 1 ? this.setByte(addr, value) : this.setWord(addr, value)
   }
 }

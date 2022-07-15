@@ -1,34 +1,35 @@
 // impor { octal } from "../helpers"
-import { Lexer } from "./lexer.js"
+import { PDPLexer, LexToken } from "./lexer.js"
 import { MemInstruction, MemData, MemFillData } from "./memory"
 import { Operators, Registers } from "./predefined.js"
 import { ParseContext } from "./parse_context"
-import { SourceCode } from "../shared_state/source_code" 
-
+import { RawLineInfo, AssembledLine, ISourceLine, ICodegenLine, SourceCode } from "../shared_state/source_code" 
 import { ParseError, error, otherError, listForExtras } from "./util"
 
-function optionalComment(line) {
+type OpAndExtra = { opEncoding: number, extraWords: number[] }
+
+function optionalComment(line: ISourceLine) {
   if (line.comment)
     return `\t\t${line.comment}`
   return ``
 }
 
-function tokens(toks) {
+function tokens(toks: LexToken[]) {
   return toks.map(t => t.text).join(``)
 }
 
-function labels(labs) {
+function labels(labs: string[]) {
   return labs.join(`\n`)
 }
 
-function t(str) {
+function t(str: string) {
   let len = str.length
   if (len === 0)
     len = 1
   return str.padEnd(8 * Math.floor((len + 7) / 8), ` `)
 }
 
-function convertOneLine(line) {
+function convertOneLine(line: AssembledLine): string {
   switch (line.type) {
     case `BlankLine`:
       return line.comment || ``
@@ -44,18 +45,24 @@ function convertOneLine(line) {
       return line.lineText
 
     default:
-      throw new Error(`unhandled line type ${line.type}`)
+      throw new Error(`unhandled line type ${line}`)
   }
 }
 
-function convertAssembledToSource(assembled) {
-  return assembled.map(convertOneLine).join(`\n`)
+function convertAssembledToSource(assembled: SourceCode) {
+  return assembled.sourceLines.map(l => convertOneLine(l)).join(`\n`)
 }
 
 export class Parser {
-  constructor(source) {
+  context: ParseContext
+  lexer: PDPLexer
+  holder: SourceCode
+
+  passNumber: number
+
+  constructor(source: string) {
     this.context = new ParseContext()
-    this.lexer = new Lexer()
+    this.lexer = new PDPLexer()
     this.lexer.analyze(source)
     this.holder = new SourceCode(source)
   }
@@ -87,7 +94,7 @@ export class Parser {
     this.holder.recordUnresolvedNames(this.context.unresolvedForwardReferences())
   }
 
-  static sourceFromAssembled(assembled) {
+  static sourceFromAssembled(assembled: SourceCode) {
     return convertAssembledToSource(assembled)
   }
 
@@ -95,7 +102,7 @@ export class Parser {
   // Lexer interface
   //
 
-  lookingAt(symType) {
+  lookingAt(symType: string) {
     const sym = this.lexer.peekNotWS()
     return (sym.type === symType)
   }
@@ -105,14 +112,14 @@ export class Parser {
     return (sym.type === `WS`)
   }
 
-  accept(symType) {
+  accept(symType: string) {
     if (this.lookingAt(symType))
       return this.lexer.next()
     else
       return null
   }
 
-  expect(symType, context) {
+  expect(symType: string, context="") {
     const sym = this.lexer.nextNotWS()
     if (sym.type === symType)
       return sym
@@ -124,7 +131,7 @@ export class Parser {
     return this.lexer.nextNotWS()
   }
 
-  pushBack(sym) {
+  pushBack(sym: LexToken) {
     this.lexer.pushBack(sym)
   }
 
@@ -140,12 +147,12 @@ export class Parser {
 
   // Interface to symbol table
 
-  lookupSymbol(name) {
+  lookupSymbol(name: string) {
     return this.context.lookupSymbol(name)
   }
 
 
-  collectTokens(callback) {
+  collectTokens(callback: () => any) {
     const pos = this.lexer.position()
     const value = callback()
     const tokens = this.lexer.tokensFromPosition(pos)
@@ -155,7 +162,7 @@ export class Parser {
   //
   // Parsing
 
-  parseLine() {
+  parseLine(): RawLineInfo {
     let sol = this.lexer.position()
 
     if (this.lookingAtWS()) {
@@ -165,7 +172,7 @@ export class Parser {
     let sym = this.next()
     let sourceLineNumber = sym.line
 
-    let result = {}
+    let result: RawLineInfo
 
     if (!sym || sym.type === `EOF`)
       return null
@@ -178,6 +185,7 @@ export class Parser {
           return {
             line: sourceLineNumber,
             type: `BlankLine`,
+            height_in_lines: 1,
             comment: sym.text,
           }
 
@@ -185,6 +193,7 @@ export class Parser {
           return {
             line: sourceLineNumber,
             type: `BlankLine`,
+            height_in_lines: 1,
             comment: null,
           }
 
@@ -207,6 +216,7 @@ export class Parser {
             type: `AssignmentLine`,
             symbol: sym.text,
             rhs: tokens,
+            height_in_lines: 1,
             value,
           }
           break
@@ -230,25 +240,27 @@ export class Parser {
         throw e
 
       this.swallowRestOfLine()
-
+    
+      const allTokens = this.lexer.tokensFromPosition(sol)
+      
       result = {
         type: `ErrorLine`,
+        height_in_lines: 1,
         message: e.message,
         line:    e.line,
         col:     e.col,
         symType: e.symType,
         symText: e.symText,
+        lineText: allTokens.map(t => t.text).join(``)
       }
     }
 
-    const allTokens = this.lexer.tokensFromPosition(sol)
-    result.lineText = allTokens.map(t => t.text).join(``)
     return result
   }
 
-  parseExpression(next) {
+  parseExpression(next: LexToken) {
     let value = this.parseTerm(next)
-    let op
+    let op: LexToken
 
     while (op = this.accept(`binop`)) {
       const t = this.parseTerm(this.next())
@@ -284,15 +296,15 @@ export class Parser {
     return value & 0xffff
   }
 
-  parseIntLiteral(number, base) {
+  parseIntLiteral(number: string, base: number) {
     if (number.startsWith(`^`))
       number = number.slice(2)
     return Number.parseInt(number, base)
   }
 
-  parseTerm(next) {
+  parseTerm(next: LexToken) {
     let sign = 1
-    let value
+    let value: number
     let complement = false
 
     while (next.type === `binop` && (next.text === `+` || next.text === `-`)) {
@@ -382,12 +394,12 @@ export class Parser {
     //     "<" expression ">"
   }
 
-  parseDD(_operator, extraWords) {
+  parseDD(extraWords: number[]) {
     let next = this.next()
-    let mode
-    let register
+    let mode: number
+    let register: number
     let deferred = 0
-    let value
+    let value: number
 
     if (next.type === `deferred`) {
       deferred = 1
@@ -448,9 +460,9 @@ export class Parser {
     return (mode | deferred) << 3 | register
   }
 
-  parseOneOp(operator) {
+  parseOneOp() {
     const extraWords = []
-    const dd = this.parseDD(operator, extraWords)
+    const dd = this.parseDD(extraWords)
     return {
       opEncoding: dd,
       extraWords,
@@ -458,11 +470,11 @@ export class Parser {
 
   }
 
-  parseTwoOp1(operator) {
+  parseTwoOp1() {
     const extraWords = []
-    const op1 = this.parseDD(operator, extraWords)
+    const op1 = this.parseDD(extraWords)
     this.expect(`comma`, `after first operand`)
-    const op2 = this.parseDD(operator, extraWords)
+    const op2 = this.parseDD(extraWords)
 
     return {
       opEncoding: op1 << 6 | op2,
@@ -470,9 +482,9 @@ export class Parser {
     }
   }
 
-  parseTwoOp2(operator) { // register comes second
+  parseTwoOp2() { // register comes second
     const extraWords = []
-    const op1 = this.parseDD(operator, extraWords)
+    const op1 = this.parseDD(extraWords)
     this.expect(`comma`)
     const reg = this.expect(`register`, ``)
 
@@ -482,11 +494,11 @@ export class Parser {
     }
   }
 
-  parseTwoOp3(operator) { // register comes first
+  parseTwoOp3() { // register comes first
     const extraWords = []
     const reg = this.expect(`register`, ``)
     this.expect(`comma`)
-    const op1 = this.parseDD(operator, extraWords)
+    const op1 = this.parseDD(extraWords)
 
     return {
       opEncoding: Registers[reg.text] << 6 | op1,
@@ -494,7 +506,7 @@ export class Parser {
     }
   }
 
-  parseBranch(_operator) {
+  parseBranch() {
     const target = this.next()
     let offset = this.parseExpression(target)
     if (isNaN(offset)) { // forward reference: replace with . for now
@@ -512,7 +524,7 @@ export class Parser {
     }
   }
 
-  parseSob(_operator) {
+  parseSob() {
     const reg = this.expect(`register`)
     this.expect(`comma`)
     const target = this.next()
@@ -524,24 +536,25 @@ export class Parser {
     offset = ((this.context.clc + 2) - offset) / 2
     if (offset > 0o77)
       error(target, `is too far away from this instruction (its offset is ${offset} words, ` +
-        `and we're limited to an offset 63 words`)
+        `and we're limited to an offset of 63 words`)
     return {
       opEncoding: Registers[reg.text] << 6 | offset & 0x3f,
       extraWords: [],
     }
   }
 
-  parseJsr(operator) {
-    const reg = this.expect(`register`)
+  parseJsr() {
+    // const reg: LexToken = this.expect(`register`)
     this.expect(`comma`)
-    const target = this.parseDD(operator)
+    const extraWords = []
+    const target = this.parseDD(extraWords)
     return {
-      opEncoding: Registers[reg.text] << 5 | target.dd,
-      extraWords: listForExtras(target.extraWord),
+      opEncoding: target,
+      extraWords: listForExtras(extraWords[0]),
     }
   }
 
-  parseRts(_operator) {
+  parseRts() {
     const reg = this.expect(`register`, `RTS takes a register operand`)
     return {
       opEncoding: Registers[reg.text],
@@ -549,11 +562,11 @@ export class Parser {
     }
   }
 
-  parseTrap(_operator) {
+  parseTrap() {
     let value = 0
     let next = this.next()
 
-    if (this.peek() === `NL`) {
+    if (this.peek().type === `NL`) {
       this.pushBack(next)
     }
     else {
@@ -568,48 +581,48 @@ export class Parser {
     }
   }
 
-  parseOpcode(_opcode) {
+  parseOpcode() {
     return {
       opEncoding: 0,
       extraWords: [],
     }
   }
 
-  parseOpcodeLine(sym) {
-    let opcode = sym.value
+  parseOpcodeLine(sym: LexToken) {
+    let opcode = sym.text
     const operator = Operators[opcode]
-    let operands
+    let operands: OpAndExtra
 
     switch (operator.fmt) {
       case `OneOp`:   
-        operands = this.parseOneOp(operator)
+        operands = this.parseOneOp()
         break
       case `TwoOp1`: 
-        operands = this.parseTwoOp1(operator)
+        operands = this.parseTwoOp1()
         break
       case `TwoOp2`: 
-        operands = this.parseTwoOp2(operator)
+        operands = this.parseTwoOp2()
         break
       case `TwoOp3`: 
-        operands = this.parseTwoOp3(operator)
+        operands = this.parseTwoOp3()
         break
       case `Branch`: 
-        operands = this.parseBranch(operator)
+        operands = this.parseBranch()
         break
       case `Sob`:       
-        operands = this.parseSob(operator)
+        operands = this.parseSob()
         break
       case `Jsr`:       
-        operands = this.parseJsr(operator)
+        operands = this.parseJsr()
         break
       case `Rts`:       
-        operands = this.parseRts(operator)
+        operands = this.parseRts()
         break
       case `Trap`:   
-        operands = this.parseTrap(operator)
+        operands = this.parseTrap()
         break
       case `Opcode`:   
-        operands = this.parseOpcode(operator)
+        operands = this.parseOpcode()
         break
       default:
         throw new Error(`Unknown operand format: ${operator.fmt}`)
@@ -626,20 +639,20 @@ export class Parser {
   }
 
 
-  generateEMT(func) {
+  generateEMT(func: number): [ number, number ] {
     const instruction = 0o104 | func
     this.context.storeWordInMemory(instruction, MemInstruction)
     return [ func, 0o210 ]
   }
 
-  parseDirectiveLine(sym) {
-    let value
-    let count
-    let generatedBytes = []
+  parseDirectiveLine(sym: LexToken): ICodegenLine {
+    let value: number
+    let count: number
+    let generatedBytes: number[] = []
     const pos = this.lexer.position()
     const line = sym.line
 
-    switch (sym.value) {
+    switch (sym.text) {
       case  `.ascii`:
       case  `.asciiz`:
       case  `.asciz`:
@@ -681,7 +694,7 @@ export class Parser {
           generatedBytes.push(ch)
         }
 
-        if (sym.value.endsWith(`z`)) {
+        if (sym.text.endsWith(`z`)) {
           this.context.storeByteInMemory(0, MemData)
           generatedBytes.push(0)
         }
@@ -775,26 +788,38 @@ export class Parser {
     }
     return {
       line,
-      type: `DirectiveLine`,
+      type: `CodegenLine`,
       rhs: this.lexer.tokensFromPosition(pos),
       opcode: sym.text,
       generatedBytes,
+      labels: [],
+      address: 0,
+      comment: null,
+      height_in_lines: 1,
     }
   }
 
-  parseAssignmentLine(sym) {
+  parseAssignmentLine(sym: LexToken): { tokens: LexToken[], value: number } {
     this.expect(`equals`, `expecting ':' (if "${sym.text}" is a label); otherwise expecting an opcode`)
-    const { tokens, value } = this.collectTokens(_ => this.parseExpression(this.next()))
+    const { tokens, value } = this.collectTokens(() => this.parseExpression(this.next()))
     this.context.addAssigned(sym.text, value)
     return { tokens, value }
   }
 
-  parseLabelledLine(sym) {
+  parseLabelledLine(sym: LexToken): ICodegenLine {
     const labels = []
     const line = sym.line
 
-    let returnValue = {
-      type: `JustLabels`,
+    let returnValue: ICodegenLine = {
+      type: `CodegenLine`,
+      comment: null,
+      line: 0,
+      height_in_lines: 1,
+      address: 0,
+      labels: [],
+      opcode: null,
+      rhs: [],
+      generatedBytes: []
     }
 
 
@@ -816,14 +841,11 @@ export class Parser {
         break
 
       case `opcode`:
-        const opResult = this.collectTokens(_ => this.parseOpcodeLine(sym))
-        returnValue = {
-          type: `OpcodeLine`,
-          opcode: sym.text,
-          rhs: opResult.tokens,
-          generatedBytes: opResult.value,
-        }
-        break
+        const opResult = this.collectTokens(() => this.parseOpcodeLine(sym))
+      returnValue.opcode = sym.text
+      returnValue.rhs = opResult.tokens
+      returnValue.generatedBytes = opResult.value
+      break
 
       case `directive`:
         returnValue = this.parseDirectiveLine(sym)
@@ -834,14 +856,13 @@ export class Parser {
     }
 
     if (sym.type === `comment`)  {
-      returnValue.comment = sym.value
+      returnValue.comment = sym.text
     }
 
     returnValue.line = line
     returnValue.labels = labels
     returnValue.address = address
     return returnValue
-
   }
 }
 

@@ -1,3 +1,4 @@
+import { MachineState } from "./machine_state"
 
 const EMThandlers = {
   0o341: func_ttyout,
@@ -5,7 +6,7 @@ const EMThandlers = {
 }
 
 
-export function internallyHandledEMT(func, state) {
+export function internallyHandledEMT(func: number, state: MachineState) {
   const handler = EMThandlers[func]
   if (!handler)
     return false
@@ -14,12 +15,12 @@ export function internallyHandledEMT(func, state) {
   return true
 }
 
-function func_ttyout(state) {
+function func_ttyout(state: MachineState) {
   const char = state.registers[0] & 0xff
   state.callbacks.emtTtyout(String.fromCharCode(char))
 }
 
-function func_print(state) {
+function func_print(state: MachineState) {
   let addr = state.registers[0]
   let maxCount = 100
   let result = []

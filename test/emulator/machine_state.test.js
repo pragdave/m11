@@ -1,4 +1,4 @@
-import { MachineState } from "../../src/emulator/machine_state"
+import { MachineState } from "../../dist/emulator/machine_state"
 
 test(`Registers start with zero`, () => {
   const reg = new MachineState().registers

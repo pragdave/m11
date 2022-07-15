@@ -5,6 +5,11 @@ const C_BIT = 0o01
 
 export class PSW {
 
+  private _N : boolean
+  private _Z : boolean
+  private _V : boolean
+  private _C : boolean
+
   constructor() {
     this._N = this._Z = this._V = this._C = false
   }
@@ -23,7 +28,7 @@ export class PSW {
             (this._C && C_BIT) 
   }
 
-  fromWord(word) {
+  fromWord(word: number) {
     this._N = !!(word & N_BIT)
     this._Z = !!(word & Z_BIT)
     this._V = !!(word & V_BIT)

@@ -1,6 +1,23 @@
+import { MSMemory, MSRegisters, PS } from "./machine_state"
+
+type AccessType = `RW` | `WR` | `W` | `R`
+type AccessTracker = Record<number, AccessType>
+
+export interface AdditionalStatus {
+  message: string,
+  pc: number
+}
+
 export class Auditor {
 
-  constructor(memory, registers, psw) {
+  memory: MSMemory
+  registers: MSRegisters
+  psw: PS
+
+  memory_accesses: AccessTracker
+  register_accesses: AccessTracker
+
+  constructor(memory: MSMemory, registers: MSRegisters, psw: PS) {
     this.memory = memory
     this.registers = registers
     this.psw = psw
@@ -13,7 +30,7 @@ export class Auditor {
     this.registers.setAuditor(this)
   }
 
-  reportAndDisable(additionalStatus, processorState) {
+  reportAndDisable(additionalStatus: AdditionalStatus, processorState: PS) {
     const result = {
       memory: this.memory,
       registers: this.registers.registers,
@@ -35,30 +52,30 @@ export class Auditor {
 
   // MEMORY 
 
-  memory_read(addr, _value, _bytes) {
+  memory_read(addr: number, _value: number, _bytes: number) {
     if (addr === 0)
       debugger
     this.read(this.memory_accesses, addr & ~1)
   }
 
-  memory_write(addr, _value, _bytes) {
+  memory_write(addr: number, _value: number, _bytes: number) {
     this.write(this.memory_accesses, addr & ~1)
   }
 
   // REGISTER 
 
-  register_read(rno, _value) {
+  register_read(rno: number, _value: number) {
     this.read(this.register_accesses, rno)
   }
 
-  register_write(rno, _value) {
+  register_write(rno: number, _value: number) {
     this.write(this.register_accesses, rno)
   }
 
   // HELPERS
   
-  read(store, key) {
-    let newFlag
+  read(store: AccessTracker, key: number) {
+    let newFlag: AccessType
 
     switch (store[key]) {
       case `RW`: case `WR`: case `W`:
@@ -71,8 +88,8 @@ export class Auditor {
     store[key] = newFlag
   }
 
-  write(store, key) {
-    let newFlag
+  write(store: AccessTracker, key: number) {
+    let newFlag: AccessType
 
     switch (store[key]) {
       case `RW`: case `WR`: case `R`:
