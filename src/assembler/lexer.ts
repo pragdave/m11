@@ -44,9 +44,8 @@ export class PDPLexer {
       rparen:          `)`,
       binop:           /[-+*/&!]/,
 
-      directive: {
+      ascii: {
         match: /\.ascii?z?\b[^\n]*/,
-        value: s => s.split(/\s+/, 1)[0],
       },
 
       symbol:  {

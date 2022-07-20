@@ -204,6 +204,7 @@ export class Parser {
         case `label`:
         case `opcode`:
         case `directive`:
+        case `ascii`:
           result = this.parseLabelledLine(sym)
           break
 
@@ -650,60 +651,67 @@ export class Parser {
     return [ func, 0o210 ]
   }
 
+  parseAsciiDirective(sym: LexToken): ICodegenLine {
+    let generatedBytes: number[] = []
+    const splitter = new RegExp(/^\.(asciiz|asciz|ascii)\b\s*(.+)/)
+    const match = splitter.exec(sym.text)
+    if (!match) {
+      error(sym, "A .asci(i|z) directive needs a delimited string") 
+    }
+
+    let [ _line, directive, string ] = match
+    string = string.trim()
+
+    if (string.length == 0)
+      error(sym, `A .${directive} directive needs a delimited string`) 
+
+    if (string.length == 1)
+      error(sym, `A .${directive} directive needs matched string delimiters`) 
+
+    const delimiter = string[0]
+    const closeDelimiterPos = string.indexOf(delimiter, 1)
+    
+    if (closeDelimiterPos < 0)
+      error(sym, `The opening delimter (${string[0]}) has no mmatching closing delimiter`)
+
+    const rest = string.slice(closeDelimiterPos+1)
+
+    if (!rest.match(/^\s*(;|$)/))
+      error(sym, `Extra stuff ("${rest}") after closing string delimiter`)
+
+    for (let i = 1; i < closeDelimiterPos; i++) {
+      const ch = string.charCodeAt(i) 
+      this.context.storeByteInMemory(ch, MemData)
+      generatedBytes.push(ch)
+    }
+
+    if (directive.endsWith(`z`)) {
+      this.context.storeByteInMemory(0, MemData)
+      generatedBytes.push(0)
+    }
+
+    return {
+      line: sym.line,
+      type: `CodegenLine`,
+      rhs: [],
+      opcode: directive,
+      generatedBytes,
+      labels: [],
+      address: 0,
+      comment: null,
+      height_in_lines: 1,
+    }
+  }
+
+
   parseDirectiveLine(sym: LexToken): ICodegenLine {
     let value: number
     let count: number
     let generatedBytes: number[] = []
-    const pos = this.lexer.position()
     const line = sym.line
+    const pos = this.lexer.position()
 
     switch (sym.text) {
-      case  `.ascii`:
-      case  `.asciiz`:
-      case  `.asciz`:
-        const line = sym.text
-        let offset = line.search(/\s\S/)
-        if (offset < 0) 
-          error(sym, `an .ascii(z) directive needs an argument`)
-
-        offset ++
-
-        if (offset === line.length)
-          error(sym, `an ascii directive requires an argument`)
-
-        const delimiter = line[offset++]
-        const start = offset
-
-        while (offset < line.length && line[offset] !== delimiter)
-          offset ++
-
-        if (offset === line.length || line[offset] !== delimiter)
-          error(sym, `couldn't find a matching delimiter («${delimiter}») at end of string`)
-
-        if (offset < line.length && line[offset] === delimiter)
-          offset++
-
-        const end = offset
-        const str = line.slice(start, offset - 1)
-
-        while (offset < line.length && line[offset] === ` `)
-          offset ++
-
-        if (offset < line.length && line[offset] !== `;`)
-          // eslint-disable-next-line max-len
-          error(sym, `extra stuff («${line.slice(end)}») on line after closing delimiter («${delimiter}»)`)
-
-        for (let i = 0; i < str.length; i++) {
-          const ch = str.charCodeAt(i) 
-          this.context.storeByteInMemory(ch, MemData)
-          generatedBytes.push(ch)
-        }
-
-        if (sym.text.endsWith(`z`)) {
-          this.context.storeByteInMemory(0, MemData)
-          generatedBytes.push(0)
-        }
-        break
 
       case  `.blkb`:
       case  `.blkw`:
@@ -789,7 +797,7 @@ export class Parser {
         break
 
       default:
-        error(sym, `unknown directive`)
+        error(sym, `Unknown directive`)
     }
     return {
       line,
@@ -853,6 +861,10 @@ export class Parser {
       returnValue.rhs = opResult.tokens
       returnValue.generatedBytes = opResult.value
       break
+
+      case `ascii`:
+        returnValue = this.parseAsciiDirective(sym)
+        break
 
       case `directive`:
         this.skipWS()

@@ -201,15 +201,9 @@ export class Emulator implements EmulatorDecoders {
   getMemoryAccessor(addr: number): Accessor {
     return {
       addr,
-      getWord: ()    => {
-        const value = this.memory.getWord(addr)
-        console.log("getWord", addr, "is", value)
-        return value
-      },
-      setWord: (val: number) => {
-        this.memory.setWord(addr, val)
-      },
-      getByte: ()    => this.memory.getByte(addr),
+      getWord: ()            => this.memory.getWord(addr),
+      setWord: (val: number) => this.memory.setWord(addr, val),
+      getByte: ()            => this.memory.getByte(addr),
       setByte: (val: number) => this.memory.setByte(addr, val & BYTE_MASK),
     }
   }
