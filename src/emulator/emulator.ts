@@ -302,7 +302,7 @@ export class Emulator implements EmulatorDecoders {
     this.memory.psw.V = false
   }
 
-  cmp(inst: number, op1: Accessor, op2: Accessor)     { 
+  cmp(_inst: number, op1: Accessor, op2: Accessor)     { 
     const psw = this.memory.psw
     const src = op1.getWord()
     const dst = op2.getWord()
@@ -313,7 +313,7 @@ export class Emulator implements EmulatorDecoders {
     this.memory.psw.C = !!(result & ~WORD_MASK)
   }
 
-  cmpb(inst: number, op1: Accessor, op2: Accessor)     { 
+  cmpb(_inst: number, op1: Accessor, op2: Accessor)     { 
     const psw = this.memory.psw
     const src = op1.getByte()
     const dst = op2.getByte()
@@ -324,7 +324,7 @@ export class Emulator implements EmulatorDecoders {
     this.memory.psw.C = !!(result & ~BYTE_MASK)
   }
 
-  bit(inst: number, op1: Accessor, op2: Accessor)     { 
+  bit(_inst: number, op1: Accessor, op2: Accessor)     { 
     const psw = this.memory.psw
     const src = op1.getWord()
     const dst = op2.getWord()
@@ -335,7 +335,7 @@ export class Emulator implements EmulatorDecoders {
     // psw.C not affected 
   }
 
-  bitb(inst: number, op1: Accessor, op2: Accessor)     { 
+  bitb(_inst: number, op1: Accessor, op2: Accessor)     { 
     const psw = this.memory.psw
     const src = op1.getByte()
     const dst = op2.getByte()
@@ -346,7 +346,7 @@ export class Emulator implements EmulatorDecoders {
     // psw.C not affected
   }
 
-  bic(inst: number, op1: Accessor, op2: Accessor)     { 
+  bic(_inst: number, op1: Accessor, op2: Accessor)     { 
     const psw = this.memory.psw
     const src = op1.getWord()
     const dst = op2.getWord()
