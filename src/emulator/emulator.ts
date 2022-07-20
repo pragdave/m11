@@ -203,6 +203,7 @@ export class Emulator implements EmulatorDecoders {
       addr,
       getWord: ()    => {
         const value = this.memory.getWord(addr)
+        console.log("getWord", addr, "is", value)
         return value
       },
       setWord: (val: number) => {

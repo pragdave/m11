@@ -23,6 +23,7 @@ function labels(labs: string[]) {
 }
 
 function t(str: string) {
+  str = str.trim()
   let len = str.length
   if (len === 0)
     len = 1
@@ -151,6 +152,11 @@ export class Parser {
     return this.context.lookupSymbol(name)
   }
 
+  skipWS() {
+    if (this.lookingAtWS()) {
+      this.lexer.next()  
+    }
+  }
 
   collectTokens(callback: () => any) {
     const pos = this.lexer.position()
@@ -165,9 +171,7 @@ export class Parser {
   parseLine(): RawLineInfo {
     let sol = this.lexer.position()
 
-    if (this.lookingAtWS()) {
-      this.lexer.next()  
-    }
+    this.skipWS()
 
     let sym = this.next()
     let sourceLineNumber = sym.line
@@ -242,7 +246,7 @@ export class Parser {
       this.swallowRestOfLine()
     
       const allTokens = this.lexer.tokensFromPosition(sol)
-      
+     console.log(allTokens) 
       result = {
         type: `ErrorLine`,
         height_in_lines: 1,
@@ -593,6 +597,7 @@ export class Parser {
     const operator = Operators[opcode]
     let operands: OpAndExtra
 
+
     switch (operator.fmt) {
       case `OneOp`:   
         operands = this.parseOneOp()
@@ -801,6 +806,7 @@ export class Parser {
 
   parseAssignmentLine(sym: LexToken): { tokens: LexToken[], value: number } {
     this.expect(`equals`, `expecting ':' (if "${sym.text}" is a label); otherwise expecting an opcode`)
+    this.skipWS()
     const { tokens, value } = this.collectTokens(() => this.parseExpression(this.next()))
     this.context.addAssigned(sym.text, value)
     return { tokens, value }
@@ -841,6 +847,7 @@ export class Parser {
         break
 
       case `opcode`:
+        this.skipWS()
         const opResult = this.collectTokens(() => this.parseOpcodeLine(sym))
       returnValue.opcode = sym.text
       returnValue.rhs = opResult.tokens
@@ -848,6 +855,7 @@ export class Parser {
       break
 
       case `directive`:
+        this.skipWS()
         returnValue = this.parseDirectiveLine(sym)
         break
 

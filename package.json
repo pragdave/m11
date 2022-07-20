@@ -5,7 +5,7 @@
   "main": "dist/main.js",
   "module": "src/main.ts",
   "scripts": {
-    "dist": "esbuild --bundle src/main.js --outdir=dist --minify --sourcemap",
+    "dist": "tsc",
     "test": "jest"
   },
   "keywords": [],

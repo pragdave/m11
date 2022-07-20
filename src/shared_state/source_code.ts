@@ -1,3 +1,5 @@
+import { LexToken } from "../assembler/lexer"
+
 export interface ISourceLine {
   type: string
   comment?: string
@@ -23,7 +25,7 @@ export interface IAssignmentLine extends ISourceLine {
   type: `AssignmentLine`
   symbol: string
   value: any
-  rhs:   any[]
+  rhs:   LexToken[]
   height_in_lines: 1
 }
 
@@ -38,7 +40,7 @@ export interface ICodegenLine extends SourceLine {
   address: number
   labels: string[]
   opcode: string
-  rhs: any[]
+  rhs: LexToken[]
   generatedBytes: number[]
 }
 
@@ -46,7 +48,7 @@ export type RawLineInfo = IBlankLine | IAssignmentLine | ICodegenLine | IErrorLi
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class SourceLine {
+export class SourceLine {
   type: string
   comment: string
   line: number
@@ -60,12 +62,14 @@ class SourceLine {
   }
 }
 
-class BlankLine extends SourceLine {
-  type: 'BlankLine'
+export class BlankLine extends SourceLine {
+  type: 'BlankLine' = 'BlankLine'
+
+
 }
 
-class ErrorLine extends SourceLine {
-  type: 'ErrorLine'
+export class ErrorLine extends SourceLine {
+  type: 'ErrorLine' = 'ErrorLine'
   message: string
   lineText: string
   col: number
@@ -82,11 +86,11 @@ class ErrorLine extends SourceLine {
   }
 }
 
-class AssignmentLine extends SourceLine {
-  type: 'AssignmentLine'
+export class AssignmentLine extends SourceLine {
+  type: 'AssignmentLine' = 'AssignmentLine'
   symbol: string
   value: any
-  rhs:   any[]
+  rhs:   LexToken[]
 
   constructor(info: IAssignmentLine) {
     super(info)
@@ -119,12 +123,12 @@ function calculate_height(addr: number, bytes: number[]) {
   return Math.ceil((len+2)/6)
 }
 
-class CodegenLine extends SourceLine {
-  type: 'CodegenLine'
+export class CodegenLine extends SourceLine {
+  type: 'CodegenLine' = 'CodegenLine'
   address: number
   labels: string[]
   opcode: string
-  rhs: any[]
+  rhs: LexToken[]
   generatedBytes: number[]
 
   constructor(info: ICodegenLine) {
