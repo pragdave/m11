@@ -3,7 +3,7 @@ import { PDPLexer, LexToken } from "./lexer"
 import { MemInstruction, MemData, MemFillData } from "./memory"
 import { Operators, Registers } from "./predefined"
 import { ParseContext } from "./parse_context"
-import { RawLineInfo, AssembledLine, ISourceLine, ICodegenLine, SourceCode } from "../shared_state/source_code" 
+import { LineType, RawLineInfo, AssembledLine, AssignmentLine, BlankLine, CodegenLine, ErrorLine, ISourceLine, ICodegenLine, SourceCode } from "../shared_state/source_code" 
 import { ParseError, error, otherError, listForExtras } from "./util"
 
 type OpAndExtra = { opEncoding: number, extraWords: number[] }
@@ -32,18 +32,20 @@ function t(str: string) {
 
 function convertOneLine(line: AssembledLine): string {
   switch (line.type) {
-    case `BlankLine`:
-      return line.comment || ``
+    case LineType.BlankLine:
+      const lb = line as BlankLine
+      return lb.comment || ``
 
-    case `AssignmentLine`:
-      return `${t(line.symbol)}${t(`=`)}${t(tokens(line.rhs))}${optionalComment(line)}`
+    case LineType.AssignmentLine:
+      const la = line as AssignmentLine
+      return `${t(la.symbol)}${t(`=`)}${t(tokens(la.rhs))}${optionalComment(la)}`
 
-    case `CodegenLine`:
-      // eslint-disable-next-line max-len
-      return `${t(labels(line.labels))}${t(line.opcode)}${t(tokens(line.rhs))}${optionalComment(line)}`
+    case LineType.CodegenLine:
+      const l = line as CodegenLine
+      return `${t(labels(l.labels))}${t(l.opcode)}${t(tokens(l.rhs))}${optionalComment(l)}`
 
-    case `ErrorLine`:
-      return line.lineText
+    case LineType.ErrorLine:
+      return (line as ErrorLine).lineText
 
     default:
       throw new Error(`unhandled line type ${line}`)
@@ -188,7 +190,7 @@ export class Parser {
           this.next()
           return {
             line: sourceLineNumber,
-            type: `BlankLine`,
+            type: LineType.BlankLine,
             height_in_lines: 1,
             comment: sym.text,
           }
@@ -196,7 +198,7 @@ export class Parser {
         case `NL`:
           return {
             line: sourceLineNumber,
-            type: `BlankLine`,
+            type: LineType.BlankLine,
             height_in_lines: 1,
             comment: null,
           }
@@ -218,7 +220,7 @@ export class Parser {
 
           result = {
             line: sourceLineNumber,
-            type: `AssignmentLine`,
+            type: LineType.AssignmentLine,
             symbol: sym.text,
             rhs: tokens,
             height_in_lines: 1,
@@ -249,7 +251,7 @@ export class Parser {
       const allTokens = this.lexer.tokensFromPosition(sol)
      console.log(allTokens) 
       result = {
-        type: `ErrorLine`,
+        type: LineType.ErrorLine,
         height_in_lines: 1,
         message: e.message,
         line:    e.line,
@@ -692,7 +694,7 @@ export class Parser {
 
     return {
       line: sym.line,
-      type: `CodegenLine`,
+      type: LineType.CodegenLine,
       rhs: [],
       opcode: directive,
       generatedBytes,
@@ -801,7 +803,7 @@ export class Parser {
     }
     return {
       line,
-      type: `CodegenLine`,
+      type: LineType.CodegenLine,
       rhs: this.lexer.tokensFromPosition(pos),
       opcode: sym.text,
       generatedBytes,
@@ -825,7 +827,7 @@ export class Parser {
     const line = sym.line
 
     let returnValue: ICodegenLine = {
-      type: `CodegenLine`,
+      type: LineType.CodegenLine,
       comment: null,
       line: 0,
       height_in_lines: 1,

@@ -14,7 +14,7 @@ export enum PS  {
   Waiting,
 }
 
-interface Callbacks {
+export interface Callbacks {
   emtTtyout: (msg: string) => void
   emtPrint: (msg: string) => void
 }

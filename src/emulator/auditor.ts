@@ -8,6 +8,16 @@ export interface AdditionalStatus {
   pc: number
 }
 
+export interface EmulationStatus {
+      memory: MSMemory
+      registers: number[]
+      psw: PS
+      memory_accesses: AccessTracker
+      register_accesses: AccessTracker
+      additionalStatus: AdditionalStatus
+      processorState: PS
+    }
+
 export class Auditor {
 
   memory: MSMemory
@@ -30,7 +40,7 @@ export class Auditor {
     this.registers.setAuditor(this)
   }
 
-  reportAndDisable(additionalStatus: AdditionalStatus, processorState: PS) {
+  reportAndDisable(additionalStatus: AdditionalStatus, processorState: PS): EmulationStatus {
     const result = {
       memory: this.memory,
       registers: this.registers.registers,

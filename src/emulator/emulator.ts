@@ -49,7 +49,7 @@ export class Emulator implements EmulatorDecoders {
     this.auditor      = new Auditor(this.memory, this.registers, this.machineState.processorState)
   }
 
-  getEmulationState(callback = null) {
+  getEmulationStatus(callback = null) {
     let additionalStatus: AdditionalStatus
 
     this.auditor.enable()
@@ -74,7 +74,7 @@ export class Emulator implements EmulatorDecoders {
   step() {
     this.machineState.processorState = PS.Running
 
-    return this.getEmulationState(() => {
+    return this.getEmulationStatus(() => {
       this.priorPC = this.registers[PC]
       this.decodeAndRun(this.fetchAtPC())
       switch (this.machineState.processorState) {

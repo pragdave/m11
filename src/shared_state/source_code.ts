@@ -1,18 +1,18 @@
 import { LexToken } from "../assembler/lexer"
 
 export interface ISourceLine {
-  type: string
+  type: LineType
   comment?: string
   line: number
   height_in_lines: number
 }
 
 export interface IBlankLine extends ISourceLine {
-  type: `BlankLine`
+  type: LineType.BlankLine
   height_in_lines: 1
 }
 export interface IErrorLine extends ISourceLine {
-  type: `ErrorLine`
+  type: LineType.ErrorLine
   message: string
   lineText: string
   col: number
@@ -22,7 +22,7 @@ export interface IErrorLine extends ISourceLine {
 }
 
 export interface IAssignmentLine extends ISourceLine {
-  type: `AssignmentLine`
+  type: LineType.AssignmentLine
   symbol: string
   value: any
   rhs:   LexToken[]
@@ -36,7 +36,7 @@ export interface IAssignmentLine extends ISourceLine {
 // }
 
 export interface ICodegenLine extends SourceLine {
-  type: `CodegenLine`
+  type: LineType.CodegenLine
   address: number
   labels: string[]
   opcode: string
@@ -48,28 +48,35 @@ export type RawLineInfo = IBlankLine | IAssignmentLine | ICodegenLine | IErrorLi
 
 ////////////////////////////////////////////////////////////////////////////////
 
-export class SourceLine {
-  type: string
+export enum LineType {
+  AssignmentLine = "AssignmentLine",
+  BlankLine      = "BlankLine",
+  CodegenLine    = "CodegenLine",
+  ErrorLine      = "ErrorLine"
+}
+
+export abstract class SourceLine {
+  type: LineType
   comment: string
   line: number
   height_in_lines = 1
 
   // comment
   constructor(info: ISourceLine) {
-    this.type = this.constructor.name
+    // this.type = this.constructor.name
     this.comment = info.comment
     this.line = info.line
   }
 }
 
 export class BlankLine extends SourceLine {
-  type: 'BlankLine' = 'BlankLine'
+  type = LineType.BlankLine
 
 
 }
 
 export class ErrorLine extends SourceLine {
-  type: 'ErrorLine' = 'ErrorLine'
+  type = LineType.ErrorLine
   message: string
   lineText: string
   col: number
@@ -87,7 +94,7 @@ export class ErrorLine extends SourceLine {
 }
 
 export class AssignmentLine extends SourceLine {
-  type: 'AssignmentLine' = 'AssignmentLine'
+  type = LineType.AssignmentLine
   symbol: string
   value: any
   rhs:   LexToken[]
@@ -124,7 +131,7 @@ function calculate_height(addr: number, bytes: number[]) {
 }
 
 export class CodegenLine extends SourceLine {
-  type: 'CodegenLine' = 'CodegenLine'
+  type = LineType.CodegenLine
   address: number
   labels: string[]
   opcode: string
@@ -169,23 +176,19 @@ export class SourceCode {
     let line: AssembledLine
 
     switch (info.type) {
-      case `AssignmentLine`:
+      case LineType.AssignmentLine:
         line = new AssignmentLine(info)
         break
 
-      case `BlankLine`:
+      case LineType.BlankLine:
         line = new BlankLine(info)
         break
 
-      case `CodegenLine`:
+      case LineType.CodegenLine:
         line = new CodegenLine(info)
         break
 
-      // case `JustLabels`:
-      //   line = new JustLabelsLine(info)
-      //   break
-
-      case `ErrorLine`:
+      case LineType.ErrorLine:
         line = new ErrorLine(info)
         this.errorCount++
         break
