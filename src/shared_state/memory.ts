@@ -1,4 +1,4 @@
-import { Auditor } from "../emulator/auditor"
+import { Auditor } from "../emulator/machine_state"
 import { PSW } from "./psw"
 
 const MEMORY_SIZE = 0o200000

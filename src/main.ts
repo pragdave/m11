@@ -5,10 +5,10 @@ export type { LexToken } from "./assembler/lexer"
 import { Parser } from "./assembler/parser"
 export { Parser } from "./assembler/parser"
 
-export { Emulator } from "./emulator/emulator"
-export { EmulationStatus } from "./emulator/auditor"
+export type { EmulationStatus } from "./emulator/machine_state"
+export { MachineState, RunningState } from "./emulator/machine_state"
 
-export { Callbacks, MachineState, PS } from "./emulator/machine_state"
+export { Emulator } from "./emulator/emulator"
 
 export function assemble(source: string) {
   const parser = new Parser(source)

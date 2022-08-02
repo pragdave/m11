@@ -1,4 +1,4 @@
-import { Auditor } from "../emulator/auditor"
+import { Auditor } from "../emulator/machine_state"
 
 export class Registers {
 

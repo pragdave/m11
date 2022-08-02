@@ -1,8 +1,8 @@
 import { decodeTable, EmulatorDecoders } from "./instruction_decode"
 import { octal, saddw } from "../helpers"
-import { AdditionalStatus, Auditor } from "./auditor"
 import { internallyHandledEMT } from "./extensions"
-import { MachineState, MSMemory, MSRegisters, PS } from "./machine_state"
+import { AdditionalStatus, MachineState, MSMemory, MSRegisters, RunningState } from "./machine_state"
+import { SourceCode } from "../main"
 
 const SP = 6, PC = 7
 
@@ -38,7 +38,7 @@ export class Emulator implements EmulatorDecoders {
   machineState: MachineState
   registers: MSRegisters
   memory: MSMemory
-  auditor: Auditor
+  // auditor: Auditor
 
   priorPC = 0
 
@@ -46,46 +46,49 @@ export class Emulator implements EmulatorDecoders {
     this.machineState = machineState
     this.registers    = machineState.registers
     this.memory       = machineState.memory
-    this.auditor      = new Auditor(this.memory, this.registers, this.machineState.processorState)
+    // this.auditor      = new Auditor(this.memory, this.registers, this.machineState.processorState)
+  }
+
+  loadAssembledCode(assemblerOutput: SourceCode) {
+    this.machineState.loadAssembledCode(assemblerOutput)
   }
 
   getEmulationStatus(callback = null) {
     let additionalStatus: AdditionalStatus
-
-    this.auditor.enable()
+    this.machineState.enableAccessTracking()
 
     if (callback) {
       try {
         callback()
       }
       catch (e)  {
+        console.log(e)
         additionalStatus = {
           message: e.message,
           pc:      this.priorPC,
         }
       }
     }
-
+console.log(this.machineState)
     return this
-    .auditor
-    .reportAndDisable(additionalStatus, this.machineState.processorState)
+    .machineState
+    .reportAndDisable(additionalStatus, this.machineState.runningState)
   }
 
   step() {
-    this.machineState.processorState = PS.Running
-
+    this.machineState.runningState = RunningState.Running
     return this.getEmulationStatus(() => {
       this.priorPC = this.registers[PC]
       this.decodeAndRun(this.fetchAtPC())
-      switch (this.machineState.processorState) {
-        case PS.Paused:
+      switch (this.machineState.runningState) {
+        case RunningState.Paused:
           console.error(`Ignoring unlikely paused state`)
           break
-        case PS.Running:
-          this.machineState.processorState = PS.Paused
+        case RunningState.Running:
+          this.machineState.runningState = RunningState.Paused
           break
         default:
-          // let playgraound handle it
+          // let playground handle it
           break
       }
     })
@@ -988,7 +991,7 @@ export class Emulator implements EmulatorDecoders {
   rtt(_inst: number)     { console.error(`missing rtt`) }
 
   halt(_inst: number)   { 
-    this.machineState.processorState = PS.Halted
+    this.machineState.runningState = RunningState.Halted
   }
 
   wait(_inst: number)    { console.error(`missing wait`) }
